@@ -65,6 +65,8 @@ public abstract class Record
             (0xA0, 56) => DeserializeMboMsg(bytes, rtype, publisherId, instrumentId, tsEvent),
 
             // MBP-1 messages (80 bytes)
+            // Note: RType 0x01 is used for both MBP-1 and TBBO schemas (they're binary-identical)
+            // TbboMessage exists as a type but can't be distinguished at deserialization without schema context
             (0x01, 80) => DeserializeMbp1Msg(bytes, rtype, publisherId, instrumentId, tsEvent),
 
             // MBP-10 messages (368 bytes)
@@ -98,9 +100,11 @@ public abstract class Record
             // Statistics messages (80 bytes)
             (0x1D, 80) => DeserializeStatMsg(bytes, rtype, publisherId, instrumentId, tsEvent),
 
-            // CMBP-1 messages (80 bytes) - includes Tcbbo
+            // CMBP-1 messages (80 bytes)
             (0xB1, 80) => DeserializeCmbp1Msg(bytes, rtype, publisherId, instrumentId, tsEvent), // Cmbp1
-            (0xC2, 80) => DeserializeCmbp1Msg(bytes, rtype, publisherId, instrumentId, tsEvent), // Tcbbo (uses Cmbp1 structure)
+
+            // Tcbbo (Trade with Consolidated BBO) - 80 bytes, distinct RType
+            (0xC2, 80) => DeserializeTcbboMsg(bytes, rtype, publisherId, instrumentId, tsEvent),
 
             // CBBO messages (80 bytes) - multiple types
             (0xC0, 80) => DeserializeCbboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Cbbo1S
@@ -674,6 +678,39 @@ public abstract class Record
         ConsolidatedBidAskPair level = DeserializeConsolidatedBidAskPair(bytes.Slice(48, 32));
 
         return new Cmbp1Message
+        {
+            RType = rtype,
+            PublisherId = publisherId,
+            InstrumentId = instrumentId,
+            TimestampNs = tsEvent,
+            Price = price,
+            Size = size,
+            Action = action,
+            Side = side,
+            Flags = flags,
+            TsRecv = tsRecv,
+            TsInDelta = tsInDelta,
+            Level = level
+        };
+    }
+
+    private static TcbboMessage DeserializeTcbboMsg(ReadOnlySpan<byte> bytes, byte rtype,
+        ushort publisherId, uint instrumentId, long tsEvent)
+    {
+        if (bytes.Length < 80)
+            throw new ArgumentException("Invalid TcbboMsg data - too small", nameof(bytes));
+
+        // TcbboMsg has the same structure as Cmbp1Msg but represents trade with consolidated BBO
+        long price = System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(bytes.Slice(16, 8));
+        uint size = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(24, 4));
+        Action action = (Action)bytes[28];
+        Side side = (Side)bytes[29];
+        byte flags = bytes[30];
+        long tsRecv = System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(bytes.Slice(32, 8));
+        int tsInDelta = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(bytes.Slice(40, 4));
+        ConsolidatedBidAskPair level = DeserializeConsolidatedBidAskPair(bytes.Slice(48, 32));
+
+        return new TcbboMessage
         {
             RType = rtype,
             PublisherId = publisherId,
