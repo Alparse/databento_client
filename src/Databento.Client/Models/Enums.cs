@@ -23,11 +23,11 @@ public enum RType : byte
     Statistics = 0x1D,
     Mbo = 0xA0,
     Cmbp1 = 0xB1,
-    Cbbo1S = 0xB2,
-    Cbbo1M = 0xB3,
-    Tcbbo = 0xB4,
-    Bbo1S = 0xC2,
-    Bbo1M = 0xC3
+    Cbbo1S = 0xC0,
+    Cbbo1M = 0xC1,
+    Tcbbo = 0xC2,
+    Bbo1S = 0xC3,
+    Bbo1M = 0xC4
 }
 
 /// <summary>

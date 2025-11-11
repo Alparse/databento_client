@@ -93,17 +93,17 @@ public abstract class Record
             // Statistics messages (80 bytes)
             (0x1D, 80) => DeserializeStatMsg(bytes, rtype, publisherId, instrumentId, tsEvent),
 
-            // BBO messages (80 bytes) - multiple types
-            (0xC2, 80) => DeserializeBboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Bbo1S
-            (0xC3, 80) => DeserializeBboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Bbo1M
+            // CMBP-1 messages (80 bytes) - includes Tcbbo
+            (0xB1, 80) => DeserializeCmbp1Msg(bytes, rtype, publisherId, instrumentId, tsEvent), // Cmbp1
+            (0xC2, 80) => DeserializeCmbp1Msg(bytes, rtype, publisherId, instrumentId, tsEvent), // Tcbbo (uses Cmbp1 structure)
 
             // CBBO messages (80 bytes) - multiple types
-            (0xB2, 80) => DeserializeCbboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Cbbo1S
-            (0xB3, 80) => DeserializeCbboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Cbbo1M
-            (0xB4, 80) => DeserializeCbboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Tcbbo
+            (0xC0, 80) => DeserializeCbboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Cbbo1S
+            (0xC1, 80) => DeserializeCbboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Cbbo1M
 
-            // CMBP-1 messages (80 bytes)
-            (0xB1, 80) => DeserializeCmbp1Msg(bytes, rtype, publisherId, instrumentId, tsEvent),
+            // BBO messages (80 bytes) - multiple types
+            (0xC3, 80) => DeserializeBboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Bbo1S
+            (0xC4, 80) => DeserializeBboMsg(bytes, rtype, publisherId, instrumentId, tsEvent), // Bbo1M
 
             // System/metadata messages
             _ => new UnknownRecord { RType = rtype, RawData = bytes.ToArray() }

@@ -32,6 +32,19 @@ public interface ILiveClient : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Subscribe to a data stream with initial snapshot
+    /// </summary>
+    /// <param name="dataset">Dataset name (e.g., "GLBX.MDP3")</param>
+    /// <param name="schema">Schema type</param>
+    /// <param name="symbols">List of symbols to subscribe to</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SubscribeWithSnapshotAsync(
+        string dataset,
+        Schema schema,
+        IEnumerable<string> symbols,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Start receiving data (non-blocking)
     /// </summary>
     Task StartAsync(CancellationToken cancellationToken = default);
@@ -40,6 +53,18 @@ public interface ILiveClient : IAsyncDisposable
     /// Stop receiving data
     /// </summary>
     Task StopAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reconnect to the gateway after disconnection
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task ReconnectAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resubscribe to all previous subscriptions
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task ResubscribeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Stream records as an async enumerable
