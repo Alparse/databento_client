@@ -370,4 +370,82 @@ public static partial class NativeMethods
 
     [LibraryImport(LibName)]
     public static partial void dbento_dbn_file_close_writer(IntPtr handle);
+
+    // ========================================================================
+    // Symbology Resolution API
+    // ========================================================================
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_historical_symbology_resolve(
+        HistoricalClientHandle handle,
+        string dataset,
+        string[] symbols,
+        nuint symbolCount,
+        string stypeIn,
+        string stypeOut,
+        string startDate,
+        string endDate,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial nuint dbento_symbology_resolution_mappings_count(
+        IntPtr handle);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial int dbento_symbology_resolution_get_mapping_key(
+        IntPtr handle,
+        nuint index,
+        byte[] keyBuffer,
+        nuint keyBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial nuint dbento_symbology_resolution_get_intervals_count(
+        IntPtr handle,
+        string symbolKey);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial int dbento_symbology_resolution_get_interval(
+        IntPtr handle,
+        string symbolKey,
+        nuint intervalIndex,
+        byte[] startDateBuffer,
+        nuint startDateBufferSize,
+        byte[] endDateBuffer,
+        nuint endDateBufferSize,
+        byte[] symbolBuffer,
+        nuint symbolBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial nuint dbento_symbology_resolution_partial_count(
+        IntPtr handle);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_symbology_resolution_get_partial(
+        IntPtr handle,
+        nuint index,
+        byte[] symbolBuffer,
+        nuint symbolBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial nuint dbento_symbology_resolution_not_found_count(
+        IntPtr handle);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_symbology_resolution_get_not_found(
+        IntPtr handle,
+        nuint index,
+        byte[] symbolBuffer,
+        nuint symbolBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_symbology_resolution_get_stype_in(
+        IntPtr handle);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_symbology_resolution_get_stype_out(
+        IntPtr handle);
+
+    [LibraryImport(LibName)]
+    public static partial void dbento_symbology_resolution_destroy(IntPtr handle);
 }

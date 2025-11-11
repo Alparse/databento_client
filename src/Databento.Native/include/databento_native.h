@@ -28,6 +28,7 @@ typedef void* DbentoTsSymbolMapHandle;
 typedef void* DbentoPitSymbolMapHandle;
 typedef void* DbnFileReaderHandle;
 typedef void* DbnFileWriterHandle;
+typedef void* DbentoSymbologyResolutionHandle;
 
 // ============================================================================
 // Callback Types
@@ -570,6 +571,171 @@ DATABENTO_API int dbento_dbn_file_write_record(
  * @param handle DBN file writer handle
  */
 DATABENTO_API void dbento_dbn_file_close_writer(DbnFileWriterHandle handle);
+
+// ============================================================================
+// Symbology Resolution API
+// ============================================================================
+
+/**
+ * Resolve symbols from one symbology type to another over a date range
+ * @param handle Historical client handle
+ * @param dataset Dataset name (e.g., "GLBX.MDP3")
+ * @param symbols Array of symbol strings to resolve
+ * @param symbol_count Number of symbols in array
+ * @param stype_in Input symbology type (e.g., "raw_symbol", "instrument_id")
+ * @param stype_out Output symbology type (e.g., "raw_symbol", "continuous")
+ * @param start_date Start date in YYYY-MM-DD format (inclusive)
+ * @param end_date End date in YYYY-MM-DD format (exclusive)
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return Handle to symbology resolution result, or NULL on failure
+ */
+DATABENTO_API DbentoSymbologyResolutionHandle dbento_historical_symbology_resolve(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    const char** symbols,
+    size_t symbol_count,
+    const char* stype_in,
+    const char* stype_out,
+    const char* start_date,
+    const char* end_date,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Get the number of mappings in the resolution result
+ * @param handle Symbology resolution handle
+ * @return Number of mappings
+ */
+DATABENTO_API size_t dbento_symbology_resolution_mappings_count(
+    DbentoSymbologyResolutionHandle handle
+);
+
+/**
+ * Get the symbol key for a mapping at a given index
+ * @param handle Symbology resolution handle
+ * @param index Index of the mapping
+ * @param key_buffer Buffer to store the symbol key
+ * @param key_buffer_size Size of the buffer
+ * @return 0 on success, -1 on error, -2 if index out of bounds
+ */
+DATABENTO_API int dbento_symbology_resolution_get_mapping_key(
+    DbentoSymbologyResolutionHandle handle,
+    size_t index,
+    char* key_buffer,
+    size_t key_buffer_size
+);
+
+/**
+ * Get the number of intervals for a given symbol mapping
+ * @param handle Symbology resolution handle
+ * @param symbol_key The symbol key to query
+ * @return Number of intervals for this symbol
+ */
+DATABENTO_API size_t dbento_symbology_resolution_get_intervals_count(
+    DbentoSymbologyResolutionHandle handle,
+    const char* symbol_key
+);
+
+/**
+ * Get a specific mapping interval
+ * @param handle Symbology resolution handle
+ * @param symbol_key The symbol key to query
+ * @param interval_index Index of the interval
+ * @param start_date_buffer Buffer for start date (YYYY-MM-DD format)
+ * @param start_date_buffer_size Size of start date buffer
+ * @param end_date_buffer Buffer for end date (YYYY-MM-DD format)
+ * @param end_date_buffer_size Size of end date buffer
+ * @param symbol_buffer Buffer for the resolved symbol
+ * @param symbol_buffer_size Size of symbol buffer
+ * @return 0 on success, -1 on error, -2 if key not found, -3 if index out of bounds
+ */
+DATABENTO_API int dbento_symbology_resolution_get_interval(
+    DbentoSymbologyResolutionHandle handle,
+    const char* symbol_key,
+    size_t interval_index,
+    char* start_date_buffer,
+    size_t start_date_buffer_size,
+    char* end_date_buffer,
+    size_t end_date_buffer_size,
+    char* symbol_buffer,
+    size_t symbol_buffer_size
+);
+
+/**
+ * Get the number of partial symbols (resolved for some but not all dates)
+ * @param handle Symbology resolution handle
+ * @return Number of partial symbols
+ */
+DATABENTO_API size_t dbento_symbology_resolution_partial_count(
+    DbentoSymbologyResolutionHandle handle
+);
+
+/**
+ * Get a partial symbol by index
+ * @param handle Symbology resolution handle
+ * @param index Index of the partial symbol
+ * @param symbol_buffer Buffer to store the symbol
+ * @param symbol_buffer_size Size of the buffer
+ * @return 0 on success, -1 on error, -2 if index out of bounds
+ */
+DATABENTO_API int dbento_symbology_resolution_get_partial(
+    DbentoSymbologyResolutionHandle handle,
+    size_t index,
+    char* symbol_buffer,
+    size_t symbol_buffer_size
+);
+
+/**
+ * Get the number of not found symbols
+ * @param handle Symbology resolution handle
+ * @return Number of not found symbols
+ */
+DATABENTO_API size_t dbento_symbology_resolution_not_found_count(
+    DbentoSymbologyResolutionHandle handle
+);
+
+/**
+ * Get a not found symbol by index
+ * @param handle Symbology resolution handle
+ * @param index Index of the not found symbol
+ * @param symbol_buffer Buffer to store the symbol
+ * @param symbol_buffer_size Size of the buffer
+ * @return 0 on success, -1 on error, -2 if index out of bounds
+ */
+DATABENTO_API int dbento_symbology_resolution_get_not_found(
+    DbentoSymbologyResolutionHandle handle,
+    size_t index,
+    char* symbol_buffer,
+    size_t symbol_buffer_size
+);
+
+/**
+ * Get the input symbology type (stype_in)
+ * @param handle Symbology resolution handle
+ * @return SType enum value as int, or -1 on error
+ */
+DATABENTO_API int dbento_symbology_resolution_get_stype_in(
+    DbentoSymbologyResolutionHandle handle
+);
+
+/**
+ * Get the output symbology type (stype_out)
+ * @param handle Symbology resolution handle
+ * @return SType enum value as int, or -1 on error
+ */
+DATABENTO_API int dbento_symbology_resolution_get_stype_out(
+    DbentoSymbologyResolutionHandle handle
+);
+
+/**
+ * Destroy a symbology resolution handle and free resources
+ * @param handle Symbology resolution handle
+ */
+DATABENTO_API void dbento_symbology_resolution_destroy(
+    DbentoSymbologyResolutionHandle handle
+);
 
 #ifdef __cplusplus
 }

@@ -6,6 +6,7 @@ using Databento.Client.Metadata;
 using Databento.Client.Models;
 using Databento.Client.Models.Batch;
 using Databento.Client.Models.Metadata;
+using Databento.Client.Models.Symbology;
 using Databento.Interop;
 using Databento.Interop.Handles;
 using Databento.Interop.Native;
@@ -882,6 +883,176 @@ public sealed class HistoricalClient : IHistoricalClient
                 NativeMethods.dbento_free_string(pathPtr);
             }
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Resolve symbols from one symbology type to another over a date range
+    /// </summary>
+    /// <param name="dataset">Dataset name (e.g., "GLBX.MDP3")</param>
+    /// <param name="symbols">Symbols to resolve</param>
+    /// <param name="stypeIn">Input symbology type</param>
+    /// <param name="stypeOut">Output symbology type</param>
+    /// <param name="startDate">Start date (inclusive)</param>
+    /// <param name="endDate">End date (exclusive)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Symbology resolution result</returns>
+    public Task<SymbologyResolution> SymbologyResolveAsync(
+        string dataset,
+        IEnumerable<string> symbols,
+        SType stypeIn,
+        SType stypeOut,
+        DateOnly startDate,
+        DateOnly endDate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataset);
+        ArgumentNullException.ThrowIfNull(symbols);
+
+        return Task.Run(() =>
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            var symbolArray = symbols.ToArray();
+            if (symbolArray.Length == 0)
+            {
+                throw new ArgumentException("Symbols collection cannot be empty", nameof(symbols));
+            }
+
+            byte[] errorBuffer = new byte[1024];
+
+            // Convert SType enums to strings (lowercase with underscores)
+            string stypeInStr = ConvertStypeToString(stypeIn);
+            string stypeOutStr = ConvertStypeToString(stypeOut);
+
+            // Format dates as YYYY-MM-DD
+            string startDateStr = startDate.ToString("yyyy-MM-dd");
+            string endDateStr = endDate.ToString("yyyy-MM-dd");
+
+            var handlePtr = NativeMethods.dbento_historical_symbology_resolve(
+                _handle,
+                dataset,
+                symbolArray,
+                (nuint)symbolArray.Length,
+                stypeInStr,
+                stypeOutStr,
+                startDateStr,
+                endDateStr,
+                errorBuffer,
+                (nuint)errorBuffer.Length);
+
+            if (handlePtr == IntPtr.Zero)
+            {
+                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                throw new DbentoException($"Failed to resolve symbology: {error}");
+            }
+
+            using var resHandle = new SymbologyResolutionHandle(handlePtr);
+
+            // Extract data from the native handle
+            var mappings = new Dictionary<string, IReadOnlyList<MappingInterval>>();
+            nuint mappingsCount = NativeMethods.dbento_symbology_resolution_mappings_count(handlePtr);
+
+            for (nuint i = 0; i < mappingsCount; i++)
+            {
+                byte[] keyBuffer = new byte[256];
+                int result = NativeMethods.dbento_symbology_resolution_get_mapping_key(
+                    handlePtr, i, keyBuffer, (nuint)keyBuffer.Length);
+
+                if (result != 0) continue;
+
+                string key = System.Text.Encoding.UTF8.GetString(keyBuffer).TrimEnd('\0');
+
+                // Get intervals for this key
+                nuint intervalCount = NativeMethods.dbento_symbology_resolution_get_intervals_count(
+                    handlePtr, key);
+
+                var intervals = new List<MappingInterval>();
+                for (nuint j = 0; j < intervalCount; j++)
+                {
+                    byte[] startDateBuffer = new byte[32];
+                    byte[] endDateBuffer = new byte[32];
+                    byte[] symbolBuffer = new byte[256];
+
+                    result = NativeMethods.dbento_symbology_resolution_get_interval(
+                        handlePtr, key, j,
+                        startDateBuffer, (nuint)startDateBuffer.Length,
+                        endDateBuffer, (nuint)endDateBuffer.Length,
+                        symbolBuffer, (nuint)symbolBuffer.Length);
+
+                    if (result == 0)
+                    {
+                        string startDateStrInterval = System.Text.Encoding.UTF8.GetString(startDateBuffer).TrimEnd('\0');
+                        string endDateStrInterval = System.Text.Encoding.UTF8.GetString(endDateBuffer).TrimEnd('\0');
+                        string symbol = System.Text.Encoding.UTF8.GetString(symbolBuffer).TrimEnd('\0');
+
+                        intervals.Add(new MappingInterval
+                        {
+                            StartDate = DateOnly.ParseExact(startDateStrInterval, "yyyy-MM-dd"),
+                            EndDate = DateOnly.ParseExact(endDateStrInterval, "yyyy-MM-dd"),
+                            Symbol = symbol
+                        });
+                    }
+                }
+
+                mappings[key] = intervals;
+            }
+
+            // Get partial symbols
+            var partial = new List<string>();
+            nuint partialCount = NativeMethods.dbento_symbology_resolution_partial_count(handlePtr);
+            for (nuint i = 0; i < partialCount; i++)
+            {
+                byte[] symbolBuffer = new byte[256];
+                if (NativeMethods.dbento_symbology_resolution_get_partial(
+                    handlePtr, i, symbolBuffer, (nuint)symbolBuffer.Length) == 0)
+                {
+                    partial.Add(System.Text.Encoding.UTF8.GetString(symbolBuffer).TrimEnd('\0'));
+                }
+            }
+
+            // Get not found symbols
+            var notFound = new List<string>();
+            nuint notFoundCount = NativeMethods.dbento_symbology_resolution_not_found_count(handlePtr);
+            for (nuint i = 0; i < notFoundCount; i++)
+            {
+                byte[] symbolBuffer = new byte[256];
+                if (NativeMethods.dbento_symbology_resolution_get_not_found(
+                    handlePtr, i, symbolBuffer, (nuint)symbolBuffer.Length) == 0)
+                {
+                    notFound.Add(System.Text.Encoding.UTF8.GetString(symbolBuffer).TrimEnd('\0'));
+                }
+            }
+
+            return new SymbologyResolution
+            {
+                Mappings = mappings,
+                Partial = partial,
+                NotFound = notFound,
+                StypeIn = stypeIn,
+                StypeOut = stypeOut
+            };
+        }, cancellationToken);
+    }
+
+    private static string ConvertStypeToString(SType stype)
+    {
+        return stype switch
+        {
+            SType.InstrumentId => "instrument_id",
+            SType.RawSymbol => "raw_symbol",
+            SType.Smart => "smart",
+            SType.Continuous => "continuous",
+            SType.Parent => "parent",
+            SType.NasdaqSymbol => "nasdaq_symbol",
+            SType.CmsSymbol => "cms_symbol",
+            SType.Isin => "isin",
+            SType.UsCode => "us_code",
+            SType.BbgCompId => "bbg_comp_id",
+            SType.BbgCompTicker => "bbg_comp_ticker",
+            SType.Figi => "figi",
+            SType.FigiTicker => "figi_ticker",
+            _ => throw new ArgumentException($"Unknown SType: {stype}", nameof(stype))
+        };
     }
 
     public ValueTask DisposeAsync()

@@ -4,11 +4,13 @@
 #include <databento/enums.hpp>
 #include <databento/timeseries.hpp>
 #include <databento/datetime.hpp>
+#include <databento/symbology.hpp>
 #include <memory>
 #include <string>
 #include <vector>
 #include <cstring>
 #include <chrono>
+#include <sstream>
 
 namespace db = databento;
 
@@ -321,6 +323,324 @@ DATABENTO_API void dbento_metadata_destroy(DbentoMetadataHandle handle)
 {
     try {
         auto* wrapper = reinterpret_cast<MetadataWrapper*>(handle);
+        delete wrapper;
+    }
+    catch (...) {
+        // Swallow exceptions in cleanup
+    }
+}
+
+// ============================================================================
+// Symbology Resolution API
+// ============================================================================
+
+struct SymbologyResolutionWrapper {
+    db::SymbologyResolution resolution;
+
+    explicit SymbologyResolutionWrapper(db::SymbologyResolution&& res)
+        : resolution(std::move(res)) {}
+};
+
+DATABENTO_API DbentoSymbologyResolutionHandle dbento_historical_symbology_resolve(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    const char** symbols,
+    size_t symbol_count,
+    const char* stype_in,
+    const char* stype_out,
+    const char* start_date,
+    const char* end_date,
+    char* error_buffer,
+    size_t error_buffer_size)
+{
+    try {
+        auto* wrapper = reinterpret_cast<HistoricalClientWrapper*>(handle);
+        if (!wrapper || !wrapper->client) {
+            SafeStrCopy(error_buffer, error_buffer_size, "Invalid client handle");
+            return nullptr;
+        }
+
+        if (!dataset || !stype_in || !stype_out || !start_date || !end_date) {
+            SafeStrCopy(error_buffer, error_buffer_size, "Invalid parameters");
+            return nullptr;
+        }
+
+        // Convert symbols to vector
+        std::vector<std::string> symbol_vec;
+        if (symbols && symbol_count > 0) {
+            for (size_t i = 0; i < symbol_count; ++i) {
+                if (symbols[i]) {
+                    symbol_vec.emplace_back(symbols[i]);
+                }
+            }
+        }
+
+        // Parse SType from strings
+        auto parse_stype = [](const std::string& stype_str) -> db::SType {
+            if (stype_str == "instrument_id") return db::SType::InstrumentId;
+            if (stype_str == "raw_symbol") return db::SType::RawSymbol;
+            if (stype_str == "parent") return db::SType::Parent;
+            if (stype_str == "continuous") return db::SType::Continuous;
+            if (stype_str == "nasdaq") return db::SType::Nasdaq;
+            if (stype_str == "cms") return db::SType::Cms;
+            if (stype_str == "gbbg") return db::SType::Gbbg;
+            if (stype_str == "figi") return db::SType::Figi;
+            if (stype_str == "figi_composite") return db::SType::FigiComposite;
+            if (stype_str == "isin") return db::SType::Isin;
+            if (stype_str == "sedol") return db::SType::Sedol;
+            if (stype_str == "cusip") return db::SType::Cusip;
+            throw std::invalid_argument("Unknown SType: " + stype_str);
+        };
+
+        db::SType stype_in_enum = parse_stype(stype_in);
+        db::SType stype_out_enum = parse_stype(stype_out);
+
+        // Parse dates using date library
+        std::istringstream start_stream(start_date);
+        std::istringstream end_stream(end_date);
+        date::year_month_day start_ymd, end_ymd;
+
+        start_stream >> date::parse("%Y-%m-%d", start_ymd);
+        end_stream >> date::parse("%Y-%m-%d", end_ymd);
+
+        if (start_stream.fail() || end_stream.fail()) {
+            SafeStrCopy(error_buffer, error_buffer_size, "Invalid date format (expected YYYY-MM-DD)");
+            return nullptr;
+        }
+
+        db::DateRange date_range{start_ymd, end_ymd};
+
+        // Call SymbologyResolve
+        auto resolution = wrapper->client->SymbologyResolve(
+            dataset,
+            symbol_vec,
+            stype_in_enum,
+            stype_out_enum,
+            date_range
+        );
+
+        auto* res_wrapper = new SymbologyResolutionWrapper(std::move(resolution));
+        return reinterpret_cast<DbentoSymbologyResolutionHandle>(res_wrapper);
+    }
+    catch (const std::exception& e) {
+        SafeStrCopy(error_buffer, error_buffer_size, e.what());
+        return nullptr;
+    }
+}
+
+DATABENTO_API size_t dbento_symbology_resolution_mappings_count(
+    DbentoSymbologyResolutionHandle handle)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        return wrapper ? wrapper->resolution.mappings.size() : 0;
+    }
+    catch (...) {
+        return 0;
+    }
+}
+
+DATABENTO_API int dbento_symbology_resolution_get_mapping_key(
+    DbentoSymbologyResolutionHandle handle,
+    size_t index,
+    char* key_buffer,
+    size_t key_buffer_size)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        if (!wrapper || !key_buffer || key_buffer_size == 0) {
+            return -1;
+        }
+
+        if (index >= wrapper->resolution.mappings.size()) {
+            return -2; // Index out of bounds
+        }
+
+        // Iterate to the index-th element
+        auto it = wrapper->resolution.mappings.begin();
+        std::advance(it, index);
+
+        SafeStrCopy(key_buffer, key_buffer_size, it->first.c_str());
+        return 0;
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+DATABENTO_API size_t dbento_symbology_resolution_get_intervals_count(
+    DbentoSymbologyResolutionHandle handle,
+    const char* symbol_key)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        if (!wrapper || !symbol_key) {
+            return 0;
+        }
+
+        auto it = wrapper->resolution.mappings.find(symbol_key);
+        if (it == wrapper->resolution.mappings.end()) {
+            return 0;
+        }
+
+        return it->second.size();
+    }
+    catch (...) {
+        return 0;
+    }
+}
+
+DATABENTO_API int dbento_symbology_resolution_get_interval(
+    DbentoSymbologyResolutionHandle handle,
+    const char* symbol_key,
+    size_t interval_index,
+    char* start_date_buffer,
+    size_t start_date_buffer_size,
+    char* end_date_buffer,
+    size_t end_date_buffer_size,
+    char* symbol_buffer,
+    size_t symbol_buffer_size)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        if (!wrapper || !symbol_key) {
+            return -1;
+        }
+
+        auto it = wrapper->resolution.mappings.find(symbol_key);
+        if (it == wrapper->resolution.mappings.end()) {
+            return -2; // Key not found
+        }
+
+        if (interval_index >= it->second.size()) {
+            return -3; // Index out of bounds
+        }
+
+        const auto& interval = it->second[interval_index];
+
+        // Format dates as YYYY-MM-DD
+        std::ostringstream start_ss, end_ss;
+        start_ss << date::format("%Y-%m-%d", interval.start_date);
+        end_ss << date::format("%Y-%m-%d", interval.end_date);
+
+        SafeStrCopy(start_date_buffer, start_date_buffer_size, start_ss.str().c_str());
+        SafeStrCopy(end_date_buffer, end_date_buffer_size, end_ss.str().c_str());
+        SafeStrCopy(symbol_buffer, symbol_buffer_size, interval.symbol.c_str());
+
+        return 0;
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+DATABENTO_API size_t dbento_symbology_resolution_partial_count(
+    DbentoSymbologyResolutionHandle handle)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        return wrapper ? wrapper->resolution.partial.size() : 0;
+    }
+    catch (...) {
+        return 0;
+    }
+}
+
+DATABENTO_API int dbento_symbology_resolution_get_partial(
+    DbentoSymbologyResolutionHandle handle,
+    size_t index,
+    char* symbol_buffer,
+    size_t symbol_buffer_size)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        if (!wrapper || !symbol_buffer || symbol_buffer_size == 0) {
+            return -1;
+        }
+
+        if (index >= wrapper->resolution.partial.size()) {
+            return -2; // Index out of bounds
+        }
+
+        SafeStrCopy(symbol_buffer, symbol_buffer_size, wrapper->resolution.partial[index].c_str());
+        return 0;
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+DATABENTO_API size_t dbento_symbology_resolution_not_found_count(
+    DbentoSymbologyResolutionHandle handle)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        return wrapper ? wrapper->resolution.not_found.size() : 0;
+    }
+    catch (...) {
+        return 0;
+    }
+}
+
+DATABENTO_API int dbento_symbology_resolution_get_not_found(
+    DbentoSymbologyResolutionHandle handle,
+    size_t index,
+    char* symbol_buffer,
+    size_t symbol_buffer_size)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        if (!wrapper || !symbol_buffer || symbol_buffer_size == 0) {
+            return -1;
+        }
+
+        if (index >= wrapper->resolution.not_found.size()) {
+            return -2; // Index out of bounds
+        }
+
+        SafeStrCopy(symbol_buffer, symbol_buffer_size, wrapper->resolution.not_found[index].c_str());
+        return 0;
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+DATABENTO_API int dbento_symbology_resolution_get_stype_in(
+    DbentoSymbologyResolutionHandle handle)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        if (!wrapper) {
+            return -1;
+        }
+        return static_cast<int>(wrapper->resolution.stype_in);
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+DATABENTO_API int dbento_symbology_resolution_get_stype_out(
+    DbentoSymbologyResolutionHandle handle)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        if (!wrapper) {
+            return -1;
+        }
+        return static_cast<int>(wrapper->resolution.stype_out);
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+DATABENTO_API void dbento_symbology_resolution_destroy(
+    DbentoSymbologyResolutionHandle handle)
+{
+    try {
+        auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
         delete wrapper;
     }
     catch (...) {
