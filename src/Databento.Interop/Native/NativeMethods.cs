@@ -97,4 +97,105 @@ public static partial class NativeMethods
 
     [LibraryImport(LibName)]
     public static partial void dbento_metadata_destroy(IntPtr handle);
+
+    // ========================================================================
+    // Metadata Query API
+    // ========================================================================
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_list_publishers(
+        HistoricalClientHandle handle,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_list_datasets(
+        HistoricalClientHandle handle,
+        string? venue,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_list_schemas(
+        HistoricalClientHandle handle,
+        string dataset,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_list_fields(
+        HistoricalClientHandle handle,
+        string encoding,
+        string schema,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_get_dataset_condition(
+        HistoricalClientHandle handle,
+        string dataset,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_get_dataset_range(
+        HistoricalClientHandle handle,
+        string dataset,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial ulong dbento_metadata_get_record_count(
+        HistoricalClientHandle handle,
+        string dataset,
+        string schema,
+        long startTimeNs,
+        long endTimeNs,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)]
+        string[] symbols,
+        nuint symbolCount,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial ulong dbento_metadata_get_billable_size(
+        HistoricalClientHandle handle,
+        string dataset,
+        string schema,
+        long startTimeNs,
+        long endTimeNs,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)]
+        string[] symbols,
+        nuint symbolCount,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_get_cost(
+        HistoricalClientHandle handle,
+        string dataset,
+        string schema,
+        long startTimeNs,
+        long endTimeNs,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)]
+        string[] symbols,
+        nuint symbolCount,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_get_billing_info(
+        HistoricalClientHandle handle,
+        string dataset,
+        string schema,
+        long startTimeNs,
+        long endTimeNs,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)]
+        string[] symbols,
+        nuint symbolCount,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial void dbento_free_string(IntPtr strPtr);
 }
