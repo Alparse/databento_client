@@ -50,7 +50,7 @@ class Program
                 symbols: new[] { "QQQ" }
             );
 
-            Console.WriteLine("✓ Subscribed to AAPL trades on EQUS.MINI");
+            Console.WriteLine("✓ Subscribed to QQQ trades on EQUS.MINI");
 
             // Start streaming
             Console.WriteLine("✓ Starting stream...\n");
