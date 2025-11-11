@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Bash(C:/vcpkg/vcpkg.exe install:*)",
+      "Bash(C:/vcpkg/vcpkg.exe integrate:*)",
+      "Bash(dotnet build:*)",
+      "Bash(where:*)",
+      "Bash(powershell:*)",
+      "Bash(test:*)",
+      "Bash(cmake --build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

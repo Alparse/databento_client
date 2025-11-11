@@ -1,0 +1,64 @@
+# Build artifacts
+build/
+bin/
+obj/
+out/
+
+# .NET build outputs
+*.dll
+*.exe
+*.pdb
+*.xml
+!src/Databento.Interop/runtimes/**/native/*.dll
+
+# CMake build files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# C++ compiled files
+*.o
+*.obj
+*.lib
+*.exp
+*.ilk
+*.log
+*.tlog
+
+# Test results
+TestResults/
+*.trx
+
+# Dependencies
+_deps/
+vcpkg_installed/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~

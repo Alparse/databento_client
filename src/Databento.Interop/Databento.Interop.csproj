@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Package Information -->
+    <PackageId>Databento.Interop</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Your Name</Authors>
+    <Description>Low-level P/Invoke layer for Databento native library</Description>
+    <PackageTags>databento;market-data;interop;pinvoke</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/yourusername/databento-dotnet</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Include native libraries in NuGet package -->
+    <None Include="runtimes\**\*" Pack="true" PackagePath="runtimes" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copy native libraries to output directory during build -->
+    <None Include="runtimes\win-x64\native\*.dll" Condition="Exists('runtimes\win-x64\native')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </None>
+    <None Include="runtimes\linux-x64\native\*.so" Condition="Exists('runtimes\linux-x64\native')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </None>
+    <None Include="runtimes\osx-x64\native\*.dylib" Condition="Exists('runtimes\osx-x64\native')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </None>
+    <None Include="runtimes\osx-arm64\native\*.dylib" Condition="Exists('runtimes\osx-arm64\native')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </None>
+
+    <!-- Copy vcpkg dependencies (Windows only) -->
+    <None Include="C:\vcpkg\installed\x64-windows\bin\libcrypto-3-x64.dll" Condition="Exists('C:\vcpkg\installed\x64-windows\bin\libcrypto-3-x64.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libcrypto-3-x64.dll</Link>
+    </None>
+    <None Include="C:\vcpkg\installed\x64-windows\bin\libssl-3-x64.dll" Condition="Exists('C:\vcpkg\installed\x64-windows\bin\libssl-3-x64.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libssl-3-x64.dll</Link>
+    </None>
+    <None Include="C:\vcpkg\installed\x64-windows\bin\zstd.dll" Condition="Exists('C:\vcpkg\installed\x64-windows\bin\zstd.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>zstd.dll</Link>
+    </None>
+    <None Include="C:\vcpkg\installed\x64-windows\bin\zlib1.dll" Condition="Exists('C:\vcpkg\installed\x64-windows\bin\zlib1.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>zlib1.dll</Link>
+    </None>
+    <None Include="C:\vcpkg\installed\x64-windows\bin\legacy.dll" Condition="Exists('C:\vcpkg\installed\x64-windows\bin\legacy.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>legacy.dll</Link>
+    </None>
+  </ItemGroup>
+
+</Project>
