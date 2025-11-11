@@ -77,7 +77,14 @@ All 16 DBN record types from databento-cpp are fully implemented:
 
 ### Recent Changes
 
-**Phase 4 (Current)** - Metadata & Symbol Mapping
+**Phase 5 (Current)** - Configuration & Builder Enhancements
+- Added 9 configuration enumerations (HistoricalGateway, FeedMode, SplitDuration, Delivery, Encoding, Compression, VersionUpgradePolicy, JobState, DatasetCondition)
+- Enhanced HistoricalClientBuilder with 5 new methods (WithGateway, WithAddress, WithUpgradePolicy, WithUserAgent, WithTimeout)
+- Enhanced LiveClientBuilder with 4 new methods (WithDataset, WithSendTsOut, WithUpgradePolicy, WithHeartbeatInterval)
+- All enums include string conversion and parsing methods
+- Forward-compatible API for advanced configuration
+
+**Phase 4** - Metadata & Symbol Mapping
 - Created IMetadata interface for instrument information queries
 - Implemented Metadata class for symbol lookups by instrument ID
 - Added GetMetadata method to HistoricalClient
