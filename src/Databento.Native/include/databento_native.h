@@ -376,6 +376,100 @@ DATABENTO_API int dbento_pit_symbol_map_on_record(
  */
 DATABENTO_API void dbento_pit_symbol_map_destroy(DbentoPitSymbolMapHandle handle);
 
+// ============================================================================
+// Batch API
+// ============================================================================
+
+/**
+ * Submit a batch job (basic version with defaults)
+ * WARNING: This will incur a cost
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param schema Schema type string
+ * @param symbols Array of symbol strings
+ * @param symbol_count Number of symbols
+ * @param start_time_ns Start time (nanoseconds since epoch)
+ * @param end_time_ns End time (nanoseconds since epoch)
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON string describing the batch job, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_batch_submit_job(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    const char* schema,
+    const char** symbols,
+    size_t symbol_count,
+    int64_t start_time_ns,
+    int64_t end_time_ns,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * List batch jobs
+ * @param handle Historical client handle
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON array of batch jobs, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_batch_list_jobs(
+    DbentoHistoricalClientHandle handle,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * List files for a batch job
+ * @param handle Historical client handle
+ * @param job_id Job identifier
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON array of file descriptions, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_batch_list_files(
+    DbentoHistoricalClientHandle handle,
+    const char* job_id,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Download all files from a batch job
+ * @param handle Historical client handle
+ * @param output_dir Output directory path
+ * @param job_id Job identifier
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON array of downloaded file paths, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_batch_download_all(
+    DbentoHistoricalClientHandle handle,
+    const char* output_dir,
+    const char* job_id,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Download a specific file from a batch job
+ * @param handle Historical client handle
+ * @param output_dir Output directory path
+ * @param job_id Job identifier
+ * @param filename Specific filename to download
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return File path as string, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_batch_download_file(
+    DbentoHistoricalClientHandle handle,
+    const char* output_dir,
+    const char* job_id,
+    const char* filename,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
 #ifdef __cplusplus
 }
 #endif

@@ -272,4 +272,51 @@ public static partial class NativeMethods
 
     [LibraryImport(LibName)]
     public static partial void dbento_pit_symbol_map_destroy(IntPtr handle);
+
+    // ========================================================================
+    // Batch API
+    // ========================================================================
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_batch_submit_job(
+        HistoricalClientHandle handle,
+        string dataset,
+        string schema,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)]
+        string[] symbols,
+        nuint symbolCount,
+        long startTimeNs,
+        long endTimeNs,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_batch_list_jobs(
+        HistoricalClientHandle handle,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_batch_list_files(
+        HistoricalClientHandle handle,
+        string jobId,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_batch_download_all(
+        HistoricalClientHandle handle,
+        string outputDir,
+        string jobId,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_batch_download_file(
+        HistoricalClientHandle handle,
+        string outputDir,
+        string jobId,
+        string filename,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
 }

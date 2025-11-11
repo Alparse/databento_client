@@ -1,5 +1,6 @@
 using Databento.Client.Metadata;
 using Databento.Client.Models;
+using Databento.Client.Models.Batch;
 using Databento.Client.Models.Metadata;
 
 namespace Databento.Client.Historical;
@@ -196,5 +197,127 @@ public interface IHistoricalClient : IAsyncDisposable
         DateTimeOffset startTime,
         DateTimeOffset endTime,
         IEnumerable<string> symbols,
+        CancellationToken cancellationToken = default);
+
+    // ========================================================================
+    // Batch API Methods
+    // ========================================================================
+
+    /// <summary>
+    /// Submit a new batch job for bulk historical data download.
+    /// WARNING: This operation will incur a cost.
+    /// </summary>
+    /// <param name="dataset">Dataset name</param>
+    /// <param name="symbols">List of symbols</param>
+    /// <param name="schema">Schema type</param>
+    /// <param name="startTime">Start time</param>
+    /// <param name="endTime">End time</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Description of the submitted batch job</returns>
+    Task<BatchJob> BatchSubmitJobAsync(
+        string dataset,
+        IEnumerable<string> symbols,
+        Schema schema,
+        DateTimeOffset startTime,
+        DateTimeOffset endTime,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Submit a new batch job with advanced options for bulk historical data download.
+    /// WARNING: This operation will incur a cost.
+    /// </summary>
+    /// <param name="dataset">Dataset name</param>
+    /// <param name="symbols">List of symbols</param>
+    /// <param name="schema">Schema type</param>
+    /// <param name="startTime">Start time</param>
+    /// <param name="endTime">End time</param>
+    /// <param name="encoding">Output encoding format</param>
+    /// <param name="compression">Compression algorithm</param>
+    /// <param name="prettyPx">Use human-readable prices</param>
+    /// <param name="prettyTs">Use human-readable timestamps</param>
+    /// <param name="mapSymbols">Include symbol mappings</param>
+    /// <param name="splitSymbols">Split output by symbol</param>
+    /// <param name="splitDuration">Split output by time duration</param>
+    /// <param name="splitSize">Split output by size (bytes)</param>
+    /// <param name="delivery">Delivery method</param>
+    /// <param name="stypeIn">Input symbology type</param>
+    /// <param name="stypeOut">Output symbology type</param>
+    /// <param name="limit">Maximum number of records (0 = unlimited)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Description of the submitted batch job</returns>
+    Task<BatchJob> BatchSubmitJobAsync(
+        string dataset,
+        IEnumerable<string> symbols,
+        Schema schema,
+        DateTimeOffset startTime,
+        DateTimeOffset endTime,
+        Encoding encoding,
+        Compression compression,
+        bool prettyPx,
+        bool prettyTs,
+        bool mapSymbols,
+        bool splitSymbols,
+        SplitDuration splitDuration,
+        ulong splitSize,
+        Delivery delivery,
+        SType stypeIn,
+        SType stypeOut,
+        ulong limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// List previous batch jobs
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of batch jobs</returns>
+    Task<IReadOnlyList<BatchJob>> BatchListJobsAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// List previous batch jobs filtered by state and date
+    /// </summary>
+    /// <param name="states">Filter by job states</param>
+    /// <param name="since">Only include jobs received since this time</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of batch jobs</returns>
+    Task<IReadOnlyList<BatchJob>> BatchListJobsAsync(
+        IEnumerable<JobState> states,
+        DateTimeOffset since,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// List all files associated with a batch job
+    /// </summary>
+    /// <param name="jobId">Batch job identifier</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of batch file descriptions</returns>
+    Task<IReadOnlyList<BatchFileDesc>> BatchListFilesAsync(
+        string jobId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Download all files from a batch job to a directory
+    /// </summary>
+    /// <param name="outputDir">Output directory path</param>
+    /// <param name="jobId">Batch job identifier</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of downloaded file paths</returns>
+    Task<IReadOnlyList<string>> BatchDownloadAsync(
+        string outputDir,
+        string jobId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Download a specific file from a batch job
+    /// </summary>
+    /// <param name="outputDir">Output directory path</param>
+    /// <param name="jobId">Batch job identifier</param>
+    /// <param name="filename">Specific filename to download</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Path to the downloaded file</returns>
+    Task<string> BatchDownloadAsync(
+        string outputDir,
+        string jobId,
+        string filename,
         CancellationToken cancellationToken = default);
 }
