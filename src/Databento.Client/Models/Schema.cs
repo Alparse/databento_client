@@ -29,6 +29,9 @@ public enum Schema
     /// <summary>OHLCV 1 day bars</summary>
     Ohlcv1D,
 
+    /// <summary>OHLCV end of day bars</summary>
+    OhlcvEod,
+
     /// <summary>Definition schema</summary>
     Definition,
 
@@ -62,6 +65,7 @@ public static class SchemaExtensions
             Schema.Ohlcv1M => "ohlcv-1m",
             Schema.Ohlcv1H => "ohlcv-1h",
             Schema.Ohlcv1D => "ohlcv-1d",
+            Schema.OhlcvEod => "ohlcv-eod",
             Schema.Definition => "definition",
             Schema.Statistics => "statistics",
             Schema.Status => "status",
@@ -85,6 +89,7 @@ public static class SchemaExtensions
             "ohlcv-1m" => Schema.Ohlcv1M,
             "ohlcv-1h" => Schema.Ohlcv1H,
             "ohlcv-1d" => Schema.Ohlcv1D,
+            "ohlcv-eod" => Schema.OhlcvEod,
             "definition" => Schema.Definition,
             "statistics" => Schema.Statistics,
             "status" => Schema.Status,

@@ -29,7 +29,8 @@
       "Task(*)",
       "TodoWrite(*)",
       "BashOutput(*)",
-      "KillShell(*)"
+      "KillShell(*)",
+      "Bash(Select-String -Pattern \"error|Build FAILED|Build succeeded\" -Context 0,2)"
     ],
     "deny": [
       "Bash(rm -rf /*)",
