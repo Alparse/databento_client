@@ -448,4 +448,40 @@ public static partial class NativeMethods
 
     [LibraryImport(LibName)]
     public static partial void dbento_symbology_resolution_destroy(IntPtr handle);
+
+    // ========================================================================
+    // Unit Prices API
+    // ========================================================================
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_historical_list_unit_prices(
+        HistoricalClientHandle handle,
+        string dataset,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial nuint dbento_unit_prices_get_modes_count(
+        IntPtr handle);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_unit_prices_get_mode(
+        IntPtr handle,
+        nuint modeIndex);
+
+    [LibraryImport(LibName)]
+    public static partial nuint dbento_unit_prices_get_schema_count(
+        IntPtr handle,
+        nuint modeIndex);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_unit_prices_get_schema_price(
+        IntPtr handle,
+        nuint modeIndex,
+        nuint schemaIndex,
+        out int outSchema,
+        out double outPrice);
+
+    [LibraryImport(LibName)]
+    public static partial void dbento_unit_prices_destroy(IntPtr handle);
 }

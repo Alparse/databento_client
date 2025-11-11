@@ -29,6 +29,7 @@ typedef void* DbentoPitSymbolMapHandle;
 typedef void* DbnFileReaderHandle;
 typedef void* DbnFileWriterHandle;
 typedef void* DbentoSymbologyResolutionHandle;
+typedef void* DbentoUnitPricesHandle;
 
 // ============================================================================
 // Callback Types
@@ -735,6 +736,81 @@ DATABENTO_API int dbento_symbology_resolution_get_stype_out(
  */
 DATABENTO_API void dbento_symbology_resolution_destroy(
     DbentoSymbologyResolutionHandle handle
+);
+
+// ============================================================================
+// Unit Prices API
+// ============================================================================
+
+/**
+ * Get unit prices per schema for all feed modes
+ * @param handle Historical client handle
+ * @param dataset Dataset name (e.g., "GLBX.MDP3")
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return Handle to unit prices result, or NULL on failure
+ */
+DATABENTO_API DbentoUnitPricesHandle dbento_historical_list_unit_prices(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Get the number of feed modes in the unit prices result
+ * @param handle Unit prices handle
+ * @return Number of feed modes
+ */
+DATABENTO_API size_t dbento_unit_prices_get_modes_count(
+    DbentoUnitPricesHandle handle
+);
+
+/**
+ * Get the feed mode for a specific mode index
+ * @param handle Unit prices handle
+ * @param mode_index Index of the feed mode
+ * @return Feed mode as int (0=Historical, 1=HistoricalStreaming, 2=Live), or -1 on error
+ */
+DATABENTO_API int dbento_unit_prices_get_mode(
+    DbentoUnitPricesHandle handle,
+    size_t mode_index
+);
+
+/**
+ * Get the number of schemas with prices for a specific feed mode
+ * @param handle Unit prices handle
+ * @param mode_index Index of the feed mode
+ * @return Number of schemas with prices
+ */
+DATABENTO_API size_t dbento_unit_prices_get_schema_count(
+    DbentoUnitPricesHandle handle,
+    size_t mode_index
+);
+
+/**
+ * Get the schema and price for a specific index within a feed mode
+ * @param handle Unit prices handle
+ * @param mode_index Index of the feed mode
+ * @param schema_index Index of the schema within that mode
+ * @param out_schema Pointer to receive schema enum value
+ * @param out_price Pointer to receive price (USD)
+ * @return 0 on success, -1 on error, -2 if index out of bounds
+ */
+DATABENTO_API int dbento_unit_prices_get_schema_price(
+    DbentoUnitPricesHandle handle,
+    size_t mode_index,
+    size_t schema_index,
+    int* out_schema,
+    double* out_price
+);
+
+/**
+ * Destroy a unit prices handle and free resources
+ * @param handle Unit prices handle
+ */
+DATABENTO_API void dbento_unit_prices_destroy(
+    DbentoUnitPricesHandle handle
 );
 
 #ifdef __cplusplus

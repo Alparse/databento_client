@@ -632,6 +632,76 @@ public sealed class HistoricalClient : IHistoricalClient
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Get unit prices per schema for all feed modes
+    /// </summary>
+    /// <param name="dataset">Dataset name</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of unit prices for each feed mode</returns>
+    public Task<IReadOnlyList<UnitPricesForMode>> ListUnitPricesAsync(
+        string dataset,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataset);
+
+        return Task.Run(() =>
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            byte[] errorBuffer = new byte[1024];
+
+            var handlePtr = NativeMethods.dbento_historical_list_unit_prices(
+                _handle,
+                dataset,
+                errorBuffer,
+                (nuint)errorBuffer.Length);
+
+            if (handlePtr == IntPtr.Zero)
+            {
+                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                throw new DbentoException($"Failed to get unit prices: {error}");
+            }
+
+            using var unitPricesHandle = new UnitPricesHandle(handlePtr);
+
+            var result = new List<UnitPricesForMode>();
+            nuint modesCount = NativeMethods.dbento_unit_prices_get_modes_count(handlePtr);
+
+            for (nuint i = 0; i < modesCount; i++)
+            {
+                int modeValue = NativeMethods.dbento_unit_prices_get_mode(handlePtr, i);
+                if (modeValue < 0) continue;
+
+                var mode = (PricingMode)modeValue;
+                var unitPricesDict = new Dictionary<Schema, decimal>();
+
+                nuint schemaCount = NativeMethods.dbento_unit_prices_get_schema_count(handlePtr, i);
+                for (nuint j = 0; j < schemaCount; j++)
+                {
+                    int schemaValue;
+                    double price;
+
+                    int resultCode = NativeMethods.dbento_unit_prices_get_schema_price(
+                        handlePtr, i, j, out schemaValue, out price);
+
+                    if (resultCode == 0)
+                    {
+                        var schema = (Schema)schemaValue;
+                        unitPricesDict[schema] = (decimal)price;
+                    }
+                }
+
+                result.Add(new UnitPricesForMode
+                {
+                    Mode = mode,
+                    UnitPrices = unitPricesDict
+                });
+            }
+
+            return (IReadOnlyList<UnitPricesForMode>)result;
+        }, cancellationToken);
+    }
+
     // ========================================================================
     // Batch API Methods
     // ========================================================================

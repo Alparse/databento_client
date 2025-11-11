@@ -379,36 +379,25 @@ DATABENTO_API DbentoSymbologyResolutionHandle dbento_historical_symbology_resolv
         auto parse_stype = [](const std::string& stype_str) -> db::SType {
             if (stype_str == "instrument_id") return db::SType::InstrumentId;
             if (stype_str == "raw_symbol") return db::SType::RawSymbol;
-            if (stype_str == "parent") return db::SType::Parent;
+            if (stype_str == "smart") return db::SType::Smart;
             if (stype_str == "continuous") return db::SType::Continuous;
-            if (stype_str == "nasdaq") return db::SType::Nasdaq;
-            if (stype_str == "cms") return db::SType::Cms;
-            if (stype_str == "gbbg") return db::SType::Gbbg;
-            if (stype_str == "figi") return db::SType::Figi;
-            if (stype_str == "figi_composite") return db::SType::FigiComposite;
+            if (stype_str == "parent") return db::SType::Parent;
+            if (stype_str == "nasdaq_symbol") return db::SType::NasdaqSymbol;
+            if (stype_str == "cms_symbol") return db::SType::CmsSymbol;
             if (stype_str == "isin") return db::SType::Isin;
-            if (stype_str == "sedol") return db::SType::Sedol;
-            if (stype_str == "cusip") return db::SType::Cusip;
+            if (stype_str == "us_code") return db::SType::UsCode;
+            if (stype_str == "bbg_comp_id") return db::SType::BbgCompId;
+            if (stype_str == "bbg_comp_ticker") return db::SType::BbgCompTicker;
+            if (stype_str == "figi") return db::SType::Figi;
+            if (stype_str == "figi_ticker") return db::SType::FigiTicker;
             throw std::invalid_argument("Unknown SType: " + stype_str);
         };
 
         db::SType stype_in_enum = parse_stype(stype_in);
         db::SType stype_out_enum = parse_stype(stype_out);
 
-        // Parse dates using date library
-        std::istringstream start_stream(start_date);
-        std::istringstream end_stream(end_date);
-        date::year_month_day start_ymd, end_ymd;
-
-        start_stream >> date::parse("%Y-%m-%d", start_ymd);
-        end_stream >> date::parse("%Y-%m-%d", end_ymd);
-
-        if (start_stream.fail() || end_stream.fail()) {
-            SafeStrCopy(error_buffer, error_buffer_size, "Invalid date format (expected YYYY-MM-DD)");
-            return nullptr;
-        }
-
-        db::DateRange date_range{start_ymd, end_ymd};
+        // DateRange uses strings in YYYY-MM-DD format
+        db::DateRange date_range{start_date, end_date};
 
         // Call SymbologyResolve
         auto resolution = wrapper->client->SymbologyResolve(
@@ -641,6 +630,131 @@ DATABENTO_API void dbento_symbology_resolution_destroy(
 {
     try {
         auto* wrapper = reinterpret_cast<SymbologyResolutionWrapper*>(handle);
+        delete wrapper;
+    }
+    catch (...) {
+        // Swallow exceptions in cleanup
+    }
+}
+
+// ============================================================================
+// Unit Prices API
+// ============================================================================
+
+struct UnitPricesWrapper {
+    std::vector<db::UnitPricesForMode> prices;
+
+    explicit UnitPricesWrapper(std::vector<db::UnitPricesForMode>&& p)
+        : prices(std::move(p)) {}
+};
+
+DATABENTO_API DbentoUnitPricesHandle dbento_historical_list_unit_prices(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    char* error_buffer,
+    size_t error_buffer_size)
+{
+    try {
+        auto* wrapper = reinterpret_cast<HistoricalClientWrapper*>(handle);
+        if (!wrapper || !wrapper->client) {
+            SafeStrCopy(error_buffer, error_buffer_size, "Invalid client handle");
+            return nullptr;
+        }
+
+        if (!dataset) {
+            SafeStrCopy(error_buffer, error_buffer_size, "Dataset cannot be null");
+            return nullptr;
+        }
+
+        auto prices = wrapper->client->MetadataListUnitPrices(dataset);
+        auto* prices_wrapper = new UnitPricesWrapper(std::move(prices));
+        return reinterpret_cast<DbentoUnitPricesHandle>(prices_wrapper);
+    }
+    catch (const std::exception& e) {
+        SafeStrCopy(error_buffer, error_buffer_size, e.what());
+        return nullptr;
+    }
+}
+
+DATABENTO_API size_t dbento_unit_prices_get_modes_count(
+    DbentoUnitPricesHandle handle)
+{
+    try {
+        auto* wrapper = reinterpret_cast<UnitPricesWrapper*>(handle);
+        return wrapper ? wrapper->prices.size() : 0;
+    }
+    catch (...) {
+        return 0;
+    }
+}
+
+DATABENTO_API int dbento_unit_prices_get_mode(
+    DbentoUnitPricesHandle handle,
+    size_t mode_index)
+{
+    try {
+        auto* wrapper = reinterpret_cast<UnitPricesWrapper*>(handle);
+        if (!wrapper || mode_index >= wrapper->prices.size()) {
+            return -1;
+        }
+        return static_cast<int>(wrapper->prices[mode_index].mode);
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+DATABENTO_API size_t dbento_unit_prices_get_schema_count(
+    DbentoUnitPricesHandle handle,
+    size_t mode_index)
+{
+    try {
+        auto* wrapper = reinterpret_cast<UnitPricesWrapper*>(handle);
+        if (!wrapper || mode_index >= wrapper->prices.size()) {
+            return 0;
+        }
+        return wrapper->prices[mode_index].unit_prices.size();
+    }
+    catch (...) {
+        return 0;
+    }
+}
+
+DATABENTO_API int dbento_unit_prices_get_schema_price(
+    DbentoUnitPricesHandle handle,
+    size_t mode_index,
+    size_t schema_index,
+    int* out_schema,
+    double* out_price)
+{
+    try {
+        auto* wrapper = reinterpret_cast<UnitPricesWrapper*>(handle);
+        if (!wrapper || mode_index >= wrapper->prices.size() || !out_schema || !out_price) {
+            return -1;
+        }
+
+        const auto& prices_map = wrapper->prices[mode_index].unit_prices;
+        if (schema_index >= prices_map.size()) {
+            return -2; // Index out of bounds
+        }
+
+        // Iterate to the schema_index-th element
+        auto it = prices_map.begin();
+        std::advance(it, schema_index);
+
+        *out_schema = static_cast<int>(it->first);
+        *out_price = it->second;
+        return 0;
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+DATABENTO_API void dbento_unit_prices_destroy(DbentoUnitPricesHandle handle)
+{
+    try {
+        auto* wrapper = reinterpret_cast<UnitPricesWrapper*>(handle);
         delete wrapper;
     }
     catch (...) {
