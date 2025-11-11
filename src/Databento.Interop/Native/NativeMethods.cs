@@ -319,4 +319,33 @@ public static partial class NativeMethods
         string filename,
         byte[]? errorBuffer,
         nuint errorBufferSize);
+
+    // ========================================================================
+    // DBN File Reader API
+    // ========================================================================
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_dbn_file_open(
+        string filePath,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_dbn_file_get_metadata(
+        DbnFileReaderHandle handle,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_dbn_file_next_record(
+        DbnFileReaderHandle handle,
+        byte[] recordBuffer,
+        nuint recordBufferSize,
+        out nuint recordLength,
+        out byte recordType,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial void dbento_dbn_file_close(IntPtr handle);
 }

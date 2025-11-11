@@ -26,6 +26,7 @@ typedef void* DbentoHistoricalClientHandle;
 typedef void* DbentoMetadataHandle;
 typedef void* DbentoTsSymbolMapHandle;
 typedef void* DbentoPitSymbolMapHandle;
+typedef void* DbnFileReaderHandle;
 
 // ============================================================================
 // Callback Types
@@ -469,6 +470,63 @@ DATABENTO_API const char* dbento_batch_download_file(
     char* error_buffer,
     size_t error_buffer_size
 );
+
+// ============================================================================
+// DBN File Reader API
+// ============================================================================
+
+/**
+ * Open a DBN file for reading
+ * @param file_path Path to the DBN file
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return Handle to DBN file reader, or NULL on failure
+ */
+DATABENTO_API DbnFileReaderHandle dbento_dbn_file_open(
+    const char* file_path,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Get metadata from a DBN file
+ * @param handle DBN file reader handle
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON string describing metadata, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_dbn_file_get_metadata(
+    DbnFileReaderHandle handle,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Read the next record from a DBN file
+ * @param handle DBN file reader handle
+ * @param record_buffer Buffer to receive record data
+ * @param record_buffer_size Size of record buffer
+ * @param record_length Output: actual length of the record
+ * @param record_type Output: record type identifier
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return 0 on success, 1 on EOF, negative on error
+ */
+DATABENTO_API int dbento_dbn_file_next_record(
+    DbnFileReaderHandle handle,
+    uint8_t* record_buffer,
+    size_t record_buffer_size,
+    size_t* record_length,
+    uint8_t* record_type,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Close a DBN file and free resources
+ * @param handle DBN file reader handle
+ */
+DATABENTO_API void dbento_dbn_file_close(DbnFileReaderHandle handle);
 
 #ifdef __cplusplus
 }
