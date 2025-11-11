@@ -19,6 +19,10 @@ public sealed class LiveClient : ILiveClient
     private readonly ErrorCallbackDelegate _errorCallback;
     private readonly Channel<Record> _recordChannel;
     private readonly CancellationTokenSource _cts;
+    private readonly string? _defaultDataset;
+    private readonly bool _sendTsOut;
+    private readonly VersionUpgradePolicy _upgradePolicy;
+    private readonly TimeSpan _heartbeatInterval;
     private Task? _streamTask;
     private bool _disposed;
 
@@ -33,9 +37,24 @@ public sealed class LiveClient : ILiveClient
     public event EventHandler<Events.ErrorEventArgs>? ErrorOccurred;
 
     internal LiveClient(string apiKey)
+        : this(apiKey, null, false, VersionUpgradePolicy.Upgrade, TimeSpan.FromSeconds(30))
+    {
+    }
+
+    internal LiveClient(
+        string apiKey,
+        string? defaultDataset,
+        bool sendTsOut,
+        VersionUpgradePolicy upgradePolicy,
+        TimeSpan heartbeatInterval)
     {
         if (string.IsNullOrEmpty(apiKey))
             throw new ArgumentException("API key cannot be null or empty", nameof(apiKey));
+
+        _defaultDataset = defaultDataset;
+        _sendTsOut = sendTsOut;
+        _upgradePolicy = upgradePolicy;
+        _heartbeatInterval = heartbeatInterval;
 
         // Create channel for streaming records
         _recordChannel = Channel.CreateUnbounded<Record>(new UnboundedChannelOptions
@@ -64,6 +83,9 @@ public sealed class LiveClient : ILiveClient
         }
 
         _handle = new LiveClientHandle(handlePtr);
+
+        // Note: Dataset default, sendTsOut, upgrade policy, and heartbeat settings
+        // are stored for future use when native layer supports configuration.
     }
 
     /// <summary>

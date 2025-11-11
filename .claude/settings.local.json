@@ -16,16 +16,16 @@
       "Task(*)",
       "TodoWrite(*)",
       "BashOutput(*)",
-      "KillShell(*)",
-      "Bash(Select-String -Pattern \"error|Build FAILED|Build succeeded\" -Context 0,2)",
-      "Bash(git push:*)",
-      "Bash(dotnet new:*)",
-      "Bash(dotnet sln:*)"
+      "KillShell(*)"
     ],
     "deny": [
       "Bash(rm -rf /*)",
       "Bash(del /F /Q C:\\*)"
     ],
-    "ask": []
+    "ask": [],
+    "defaultMode": "bypassPermissions"
+  },
+  "sandbox": {
+    "autoAllowBashIfSandboxed": true
   }
 }

@@ -15,12 +15,37 @@ namespace Databento.Client.Historical;
 public sealed class HistoricalClient : IHistoricalClient
 {
     private readonly HistoricalClientHandle _handle;
+    private readonly HistoricalGateway _gateway;
+    private readonly string? _customHost;
+    private readonly ushort? _customPort;
+    private readonly VersionUpgradePolicy _upgradePolicy;
+    private readonly string? _userAgent;
+    private readonly TimeSpan _timeout;
     private bool _disposed;
 
     internal HistoricalClient(string apiKey)
+        : this(apiKey, HistoricalGateway.Bo1, null, null, VersionUpgradePolicy.Upgrade, null, TimeSpan.FromSeconds(30))
+    {
+    }
+
+    internal HistoricalClient(
+        string apiKey,
+        HistoricalGateway gateway,
+        string? customHost,
+        ushort? customPort,
+        VersionUpgradePolicy upgradePolicy,
+        string? userAgent,
+        TimeSpan timeout)
     {
         if (string.IsNullOrEmpty(apiKey))
             throw new ArgumentException("API key cannot be null or empty", nameof(apiKey));
+
+        _gateway = gateway;
+        _customHost = customHost;
+        _customPort = customPort;
+        _upgradePolicy = upgradePolicy;
+        _userAgent = userAgent;
+        _timeout = timeout;
 
         byte[] errorBuffer = new byte[512];
         var handlePtr = NativeMethods.dbento_historical_create(apiKey, errorBuffer, (nuint)errorBuffer.Length);
@@ -32,6 +57,9 @@ public sealed class HistoricalClient : IHistoricalClient
         }
 
         _handle = new HistoricalClientHandle(handlePtr);
+
+        // Note: Gateway, upgrade policy, and other settings are stored for future use
+        // when native layer supports configuration. For now, defaults are used.
     }
 
     /// <summary>
