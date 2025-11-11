@@ -153,6 +153,83 @@ DATABENTO_API int dbento_historical_get_range(
     }
 }
 
+DATABENTO_API int dbento_historical_get_range_to_file(
+    DbentoHistoricalClientHandle handle,
+    const char* file_path,
+    const char* dataset,
+    const char* schema,
+    const char** symbols,
+    size_t symbol_count,
+    int64_t start_time_ns,
+    int64_t end_time_ns,
+    char* error_buffer,
+    size_t error_buffer_size)
+{
+    try {
+        auto* wrapper = reinterpret_cast<HistoricalClientWrapper*>(handle);
+        if (!wrapper || !wrapper->client) {
+            SafeStrCopy(error_buffer, error_buffer_size, "Invalid client handle");
+            return -1;
+        }
+
+        if (!file_path || !dataset || !schema) {
+            SafeStrCopy(error_buffer, error_buffer_size, "Invalid parameters");
+            return -2;
+        }
+
+        // Convert symbols to vector
+        std::vector<std::string> symbol_vec;
+        if (symbols && symbol_count > 0) {
+            for (size_t i = 0; i < symbol_count; ++i) {
+                if (symbols[i]) {
+                    symbol_vec.emplace_back(symbols[i]);
+                }
+            }
+        }
+
+        // Parse schema from string to enum
+        db::Schema schema_enum;
+        std::string schema_str = schema;
+        if (schema_str == "mbo") schema_enum = db::Schema::Mbo;
+        else if (schema_str == "mbp-1") schema_enum = db::Schema::Mbp1;
+        else if (schema_str == "mbp-10") schema_enum = db::Schema::Mbp10;
+        else if (schema_str == "trades") schema_enum = db::Schema::Trades;
+        else if (schema_str == "ohlcv-1s") schema_enum = db::Schema::Ohlcv1S;
+        else if (schema_str == "ohlcv-1m") schema_enum = db::Schema::Ohlcv1M;
+        else if (schema_str == "ohlcv-1h") schema_enum = db::Schema::Ohlcv1H;
+        else if (schema_str == "ohlcv-1d") schema_enum = db::Schema::Ohlcv1D;
+        else if (schema_str == "ohlcv-eod") schema_enum = db::Schema::OhlcvEod;
+        else if (schema_str == "definition") schema_enum = db::Schema::Definition;
+        else if (schema_str == "statistics") schema_enum = db::Schema::Statistics;
+        else if (schema_str == "status") schema_enum = db::Schema::Status;
+        else if (schema_str == "imbalance") schema_enum = db::Schema::Imbalance;
+        else {
+            SafeStrCopy(error_buffer, error_buffer_size, "Unknown schema type");
+            return -3;
+        }
+
+        // Convert timestamps
+        auto start_unix = NsToUnixNanos(start_time_ns);
+        auto end_unix = NsToUnixNanos(end_time_ns);
+        db::DateTimeRange<db::UnixNanos> datetime_range{start_unix, end_unix};
+
+        // Call TimeseriesGetRangeToFile
+        wrapper->client->TimeseriesGetRangeToFile(
+            dataset,
+            datetime_range,
+            symbol_vec,
+            schema_enum,
+            std::filesystem::path{file_path}
+        );
+
+        return 0;
+    }
+    catch (const std::exception& e) {
+        SafeStrCopy(error_buffer, error_buffer_size, e.what());
+        return -1;
+    }
+}
+
 DATABENTO_API DbentoMetadataHandle dbento_historical_get_metadata(
     DbentoHistoricalClientHandle handle,
     const char* dataset,

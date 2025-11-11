@@ -72,6 +72,20 @@ public static partial class NativeMethods
         nuint errorBufferSize);
 
     [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial int dbento_historical_get_range_to_file(
+        HistoricalClientHandle handle,
+        string filePath,
+        string dataset,
+        string schema,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)]
+        string[] symbols,
+        nuint symbolCount,
+        long startTimeNs,
+        long endTimeNs,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
     public static partial IntPtr dbento_historical_get_metadata(
         HistoricalClientHandle handle,
         string dataset,

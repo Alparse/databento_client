@@ -28,6 +28,26 @@ public interface IHistoricalClient : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Query historical data and save directly to a DBN file
+    /// </summary>
+    /// <param name="filePath">Output file path for DBN file</param>
+    /// <param name="dataset">Dataset name (e.g., "GLBX.MDP3")</param>
+    /// <param name="schema">Schema type</param>
+    /// <param name="symbols">List of symbols</param>
+    /// <param name="startTime">Start time</param>
+    /// <param name="endTime">End time</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Path to the created DBN file</returns>
+    Task<string> GetRangeToFileAsync(
+        string filePath,
+        string dataset,
+        Schema schema,
+        IEnumerable<string> symbols,
+        DateTimeOffset startTime,
+        DateTimeOffset endTime,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get metadata for a historical query
     /// Note: This feature is currently not fully implemented in the native layer
     /// </summary>

@@ -150,6 +150,55 @@ public sealed class HistoricalClient : IHistoricalClient
     }
 
     /// <summary>
+    /// Query historical data and save directly to a DBN file
+    /// </summary>
+    public async Task<string> GetRangeToFileAsync(
+        string filePath,
+        string dataset,
+        Schema schema,
+        IEnumerable<string> symbols,
+        DateTimeOffset startTime,
+        DateTimeOffset endTime,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
+
+        var symbolArray = symbols.ToArray();
+
+        // Convert times to nanoseconds since epoch
+        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
+        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+
+        return await Task.Run(() =>
+        {
+            byte[] errorBuffer = new byte[512];
+
+            var result = NativeMethods.dbento_historical_get_range_to_file(
+                _handle,
+                filePath,
+                dataset,
+                schema.ToSchemaString(),
+                symbolArray,
+                (nuint)symbolArray.Length,
+                startTimeNs,
+                endTimeNs,
+                errorBuffer,
+                (nuint)errorBuffer.Length);
+
+            if (result != 0)
+            {
+                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                throw new DbentoException($"Failed to save historical data to file: {error}", result);
+            }
+
+            return filePath;
+        }, cancellationToken);
+    }
+
+    /// <summary>
     /// Get metadata for a historical query
     /// Note: This feature is currently not fully implemented in the native layer
     /// </summary>
