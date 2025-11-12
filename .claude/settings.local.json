@@ -16,7 +16,8 @@
       "Task(*)",
       "TodoWrite(*)",
       "BashOutput(*)",
-      "KillShell(*)"
+      "KillShell(*)",
+      "Bash(find:*)"
     ],
     "deny": [
       "Bash(rm -rf /*)",

@@ -46,6 +46,53 @@ public static partial class NativeMethods
     [LibraryImport(LibName)]
     public static partial void dbento_live_destroy(IntPtr handle);
 
+    // Phase 15: Extended Live Client API
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_live_create_ex(
+        string apiKey,
+        string? dataset,
+        int sendTsOut,
+        int upgradePolicy,
+        int heartbeatIntervalSecs,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_live_reconnect(
+        LiveClientHandle handle,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_live_resubscribe(
+        LiveClientHandle handle,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_live_start_ex(
+        LiveClientHandle handle,
+        MetadataCallbackDelegate? onMetadata,
+        RecordCallbackDelegate onRecord,
+        ErrorCallbackDelegate? onError,
+        IntPtr userData,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial int dbento_live_subscribe_with_snapshot(
+        LiveClientHandle handle,
+        string dataset,
+        string schema,
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)]
+        string[] symbols,
+        nuint symbolCount,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName)]
+    public static partial int dbento_live_get_connection_state(LiveClientHandle handle);
+
     // ========================================================================
     // Historical Client API
     // ========================================================================

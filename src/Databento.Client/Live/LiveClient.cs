@@ -39,6 +39,28 @@ public sealed class LiveClient : ILiveClient
     /// </summary>
     public event EventHandler<Events.ErrorEventArgs>? ErrorOccurred;
 
+    /// <summary>
+    /// Get current connection state from native client (Phase 15)
+    /// </summary>
+    public ConnectionState ConnectionState
+    {
+        get
+        {
+            if (_disposed)
+                return ConnectionState.Disconnected;
+
+            var state = NativeMethods.dbento_live_get_connection_state(_handle);
+            return state switch
+            {
+                0 => ConnectionState.Disconnected,
+                1 => ConnectionState.Connecting,
+                2 => ConnectionState.Connected,
+                3 => ConnectionState.Streaming,
+                _ => ConnectionState.Disconnected
+            };
+        }
+    }
+
     internal LiveClient(string apiKey)
         : this(apiKey, null, false, VersionUpgradePolicy.Upgrade, TimeSpan.FromSeconds(30))
     {
@@ -78,9 +100,16 @@ public sealed class LiveClient : ILiveClient
             _errorCallback = OnErrorOccurred;
         }
 
-        // Create native client
+        // Create native client with full configuration (Phase 15)
         byte[] errorBuffer = new byte[512];
-        var handlePtr = NativeMethods.dbento_live_create(apiKey, errorBuffer, (nuint)errorBuffer.Length);
+        var handlePtr = NativeMethods.dbento_live_create_ex(
+            apiKey,
+            defaultDataset,
+            sendTsOut ? 1 : 0,
+            (int)upgradePolicy,
+            (int)heartbeatInterval.TotalSeconds,
+            errorBuffer,
+            (nuint)errorBuffer.Length);
 
         if (handlePtr == IntPtr.Zero)
         {
@@ -89,9 +118,6 @@ public sealed class LiveClient : ILiveClient
         }
 
         _handle = new LiveClientHandle(handlePtr);
-
-        // Note: Dataset default, sendTsOut, upgrade policy, and heartbeat settings
-        // are stored for future use when native layer supports configuration.
     }
 
     /// <summary>
@@ -130,7 +156,7 @@ public sealed class LiveClient : ILiveClient
     }
 
     /// <summary>
-    /// Subscribe to a data stream with initial snapshot
+    /// Subscribe to a data stream with initial snapshot (Phase 15)
     /// </summary>
     public Task SubscribeWithSnapshotAsync(
         string dataset,
@@ -143,9 +169,8 @@ public sealed class LiveClient : ILiveClient
         var symbolArray = symbols.ToArray();
         byte[] errorBuffer = new byte[512];
 
-        // Note: Native layer may not support snapshot parameter yet
-        // For now, call regular subscribe and track as snapshot subscription
-        var result = NativeMethods.dbento_live_subscribe(
+        // Use native subscribe with snapshot support
+        var result = NativeMethods.dbento_live_subscribe_with_snapshot(
             _handle,
             dataset,
             schema.ToSchemaString(),
@@ -157,7 +182,7 @@ public sealed class LiveClient : ILiveClient
         if (result != 0)
         {
             var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
-            throw new DbentoException($"Subscription failed: {error}", result);
+            throw new DbentoException($"Subscription with snapshot failed: {error}", result);
         }
 
         // Track subscription for resubscription
@@ -220,7 +245,7 @@ public sealed class LiveClient : ILiveClient
     }
 
     /// <summary>
-    /// Reconnect to the gateway after disconnection
+    /// Reconnect to the gateway after disconnection (Phase 15)
     /// </summary>
     public async Task ReconnectAsync(CancellationToken cancellationToken = default)
     {
@@ -228,7 +253,7 @@ public sealed class LiveClient : ILiveClient
 
         _connectionState = ConnectionState.Reconnecting;
 
-        // Stop current connection
+        // Stop current stream task if running
         if (_streamTask != null)
         {
             NativeMethods.dbento_live_stop(_handle);
@@ -243,54 +268,35 @@ public sealed class LiveClient : ILiveClient
             _streamTask = null;
         }
 
-        // Dispose and recreate handle
-        _handle?.Dispose();
-
-        // Create new native client
+        // Use native reconnect (doesn't dispose handle!)
         byte[] errorBuffer = new byte[512];
-        var handlePtr = NativeMethods.dbento_live_create(_apiKey, errorBuffer, (nuint)errorBuffer.Length);
+        var result = NativeMethods.dbento_live_reconnect(_handle, errorBuffer, (nuint)errorBuffer.Length);
 
-        if (handlePtr == IntPtr.Zero)
+        if (result != 0)
         {
             var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
             _connectionState = ConnectionState.Disconnected;
-            throw new DbentoException($"Failed to reconnect: {error}");
+            throw new DbentoException($"Reconnect failed: {error}", result);
         }
 
-        // Update handle (requires reflection or handle recreation logic)
-        // Note: This is a simplified implementation
         _connectionState = ConnectionState.Connected;
     }
 
     /// <summary>
-    /// Resubscribe to all previous subscriptions
+    /// Resubscribe to all previous subscriptions (Phase 15)
     /// </summary>
     public async Task ResubscribeAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (_subscriptions.Count == 0)
-            return;
+        // Use native resubscribe (handles all tracked subscriptions internally)
+        byte[] errorBuffer = new byte[512];
+        var result = NativeMethods.dbento_live_resubscribe(_handle, errorBuffer, (nuint)errorBuffer.Length);
 
-        // Resubscribe to all tracked subscriptions
-        foreach (var (dataset, schema, symbols, withSnapshot) in _subscriptions.ToList())
+        if (result != 0)
         {
-            byte[] errorBuffer = new byte[512];
-
-            var result = NativeMethods.dbento_live_subscribe(
-                _handle,
-                dataset,
-                schema.ToSchemaString(),
-                symbols,
-                (nuint)symbols.Length,
-                errorBuffer,
-                (nuint)errorBuffer.Length);
-
-            if (result != 0)
-            {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
-                throw new DbentoException($"Resubscription failed for {dataset}/{schema}: {error}", result);
-            }
+            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            throw new DbentoException($"Resubscription failed: {error}", result);
         }
 
         await Task.CompletedTask;

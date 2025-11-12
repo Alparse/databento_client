@@ -27,3 +27,15 @@ public delegate void ErrorCallbackDelegate(
     [MarshalAs(UnmanagedType.LPUTF8Str)] string errorMessage,
     int errorCode,
     IntPtr userData);
+
+/// <summary>
+/// Callback invoked when session metadata is received from live client (Phase 15)
+/// </summary>
+/// <param name="metadataJson">JSON string containing session metadata</param>
+/// <param name="metadataLength">Length of metadata string in bytes</param>
+/// <param name="userData">User-provided context pointer</param>
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate void MetadataCallbackDelegate(
+    [MarshalAs(UnmanagedType.LPUTF8Str)] string metadataJson,
+    nuint metadataLength,
+    IntPtr userData);

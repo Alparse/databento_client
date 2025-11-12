@@ -61,6 +61,18 @@ typedef void (*ErrorCallback)(
     void* user_data
 );
 
+/**
+ * Callback for session metadata (Phase 15)
+ * @param metadata_json JSON string containing session metadata
+ * @param metadata_length Length of metadata string in bytes
+ * @param user_data User-provided context pointer
+ */
+typedef void (*MetadataCallback)(
+    const char* metadata_json,
+    size_t metadata_length,
+    void* user_data
+);
+
 // ============================================================================
 // Live Client API
 // ============================================================================
@@ -129,6 +141,102 @@ DATABENTO_API void dbento_live_stop(DbentoLiveClientHandle handle);
  * @param handle Live client handle
  */
 DATABENTO_API void dbento_live_destroy(DbentoLiveClientHandle handle);
+
+/**
+ * Create a live client with extended configuration (Phase 15)
+ * @param api_key Databento API key (required)
+ * @param dataset Default dataset for subscriptions (can be NULL)
+ * @param send_ts_out Include gateway send timestamps (0=false, non-zero=true)
+ * @param upgrade_policy Version upgrade policy (0=AsIs, 1=Upgrade)
+ * @param heartbeat_interval_secs Heartbeat interval in seconds (0 or negative=default 30s)
+ * @param error_buffer Buffer for error messages (can be NULL)
+ * @param error_buffer_size Size of error buffer
+ * @return Handle to live client, or NULL on failure
+ */
+DATABENTO_API DbentoLiveClientHandle dbento_live_create_ex(
+    const char* api_key,
+    const char* dataset,
+    int send_ts_out,
+    int upgrade_policy,
+    int heartbeat_interval_secs,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Reconnect to the gateway after disconnection (Phase 15)
+ * @param handle Live client handle
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return 0 on success, negative error code on failure
+ */
+DATABENTO_API int dbento_live_reconnect(
+    DbentoLiveClientHandle handle,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Resubscribe to all previously tracked subscriptions (Phase 15)
+ * @param handle Live client handle
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return 0 on success, negative error code on failure
+ */
+DATABENTO_API int dbento_live_resubscribe(
+    DbentoLiveClientHandle handle,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Start receiving data with metadata callback support (Phase 15)
+ * @param handle Live client handle
+ * @param on_metadata Callback invoked once for session metadata (can be NULL)
+ * @param on_record Callback invoked for each received record
+ * @param on_error Callback invoked on errors
+ * @param user_data User context passed to callbacks
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return 0 on success, negative error code on failure
+ */
+DATABENTO_API int dbento_live_start_ex(
+    DbentoLiveClientHandle handle,
+    MetadataCallback on_metadata,
+    RecordCallback on_record,
+    ErrorCallback on_error,
+    void* user_data,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Subscribe to data streams with initial snapshot (Phase 15)
+ * @param handle Live client handle
+ * @param dataset Dataset name (e.g., "GLBX.MDP3")
+ * @param schema Schema name (e.g., "trades", "mbp-1", "ohlcv-1s")
+ * @param symbols Array of symbol strings (NULL-terminated)
+ * @param symbol_count Number of symbols in array
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return 0 on success, negative error code on failure
+ */
+DATABENTO_API int dbento_live_subscribe_with_snapshot(
+    DbentoLiveClientHandle handle,
+    const char* dataset,
+    const char* schema,
+    const char** symbols,
+    size_t symbol_count,
+    char* error_buffer,
+    size_t error_buffer_size
+);
+
+/**
+ * Get current connection state (Phase 15)
+ * @param handle Live client handle
+ * @return Connection state: 0=Disconnected, 1=Connecting, 2=Connected, 3=Streaming
+ */
+DATABENTO_API int dbento_live_get_connection_state(DbentoLiveClientHandle handle);
 
 // ============================================================================
 // Historical Client API
