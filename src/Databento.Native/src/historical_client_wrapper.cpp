@@ -15,6 +15,8 @@
 
 namespace db = databento;
 using databento_native::SafeStrCopy;
+using databento_native::ParseSchema;
+using databento_native::NsToUnixNanos;
 
 // ============================================================================
 // Internal Wrapper Class
@@ -37,13 +39,8 @@ struct MetadataWrapper {
 };
 
 // ============================================================================
-// Helper Functions
+// Helper Functions (now in common_helpers.hpp)
 // ============================================================================
-
-// Convert nanoseconds since epoch to UnixNanos
-static db::UnixNanos NsToUnixNanos(int64_t ns) {
-    return db::UnixNanos{std::chrono::duration<uint64_t, std::nano>{static_cast<uint64_t>(ns)}};
-}
 
 // ============================================================================
 // C API Implementation

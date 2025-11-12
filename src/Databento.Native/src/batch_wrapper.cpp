@@ -14,6 +14,11 @@
 namespace db = databento;
 using json = nlohmann::json;
 using databento_native::SafeStrCopy;
+using databento_native::ParseSchema;
+using databento_native::NsToUnixNanos;
+using databento_native::ValidateNonEmptyString;
+using databento_native::ValidateSymbolArray;
+using databento_native::ValidateTimeRange;
 
 // ============================================================================
 // External Wrapper Structure (from historical_client_wrapper.cpp)
@@ -30,31 +35,8 @@ struct HistoricalClientWrapper {
 };
 
 // ============================================================================
-// Helper Functions
+// Helper Functions (now in common_helpers.hpp)
 // ============================================================================
-
-// Convert nanoseconds since epoch to UnixNanos
-static db::UnixNanos NsToUnixNanos(int64_t ns) {
-    return db::UnixNanos{std::chrono::duration<uint64_t, std::nano>{static_cast<uint64_t>(ns)}};
-}
-
-// Parse schema string to enum
-static db::Schema ParseSchema(const std::string& schema_str) {
-    if (schema_str == "mbo") return db::Schema::Mbo;
-    else if (schema_str == "mbp-1") return db::Schema::Mbp1;
-    else if (schema_str == "mbp-10") return db::Schema::Mbp10;
-    else if (schema_str == "trades") return db::Schema::Trades;
-    else if (schema_str == "ohlcv-1s") return db::Schema::Ohlcv1S;
-    else if (schema_str == "ohlcv-1m") return db::Schema::Ohlcv1M;
-    else if (schema_str == "ohlcv-1h") return db::Schema::Ohlcv1H;
-    else if (schema_str == "ohlcv-1d") return db::Schema::Ohlcv1D;
-    else if (schema_str == "ohlcv-eod") return db::Schema::OhlcvEod;
-    else if (schema_str == "definition") return db::Schema::Definition;
-    else if (schema_str == "statistics") return db::Schema::Statistics;
-    else if (schema_str == "status") return db::Schema::Status;
-    else if (schema_str == "imbalance") return db::Schema::Imbalance;
-    else throw std::runtime_error("Unknown schema: " + schema_str);
-}
 
 // Convert BatchJob to JSON
 static json BatchJobToJson(const db::BatchJob& job) {
@@ -132,10 +114,11 @@ DATABENTO_API const char* dbento_batch_submit_job(
             return nullptr;
         }
 
-        if (!dataset || !schema) {
-            SafeStrCopy(error_buffer, error_buffer_size, "Invalid parameters");
-            return nullptr;
-        }
+        // Comprehensive input validation
+        ValidateNonEmptyString("dataset", dataset);
+        ValidateNonEmptyString("schema", schema);
+        ValidateSymbolArray(symbols, symbol_count);
+        ValidateTimeRange(start_time_ns, end_time_ns);
 
         // Convert symbols to vector
         std::vector<std::string> symbol_vec;
@@ -147,10 +130,10 @@ DATABENTO_API const char* dbento_batch_submit_job(
             }
         }
 
-        // Parse schema
+        // Parse schema (throws on invalid schema)
         db::Schema schema_enum = ParseSchema(schema);
 
-        // Convert timestamps
+        // Convert timestamps (throws on invalid range)
         auto start_unix = NsToUnixNanos(start_time_ns);
         auto end_unix = NsToUnixNanos(end_time_ns);
         db::DateTimeRange<db::UnixNanos> datetime_range{start_unix, end_unix};
@@ -216,10 +199,8 @@ DATABENTO_API const char* dbento_batch_list_files(
             return nullptr;
         }
 
-        if (!job_id) {
-            SafeStrCopy(error_buffer, error_buffer_size, "Job ID cannot be null");
-            return nullptr;
-        }
+        // Validate job ID
+        ValidateNonEmptyString("job_id", job_id);
 
         // List files for job
         std::vector<db::BatchFileDesc> files = wrapper->client->BatchListFiles(job_id);
@@ -253,10 +234,9 @@ DATABENTO_API const char* dbento_batch_download_all(
             return nullptr;
         }
 
-        if (!output_dir || !job_id) {
-            SafeStrCopy(error_buffer, error_buffer_size, "Invalid parameters");
-            return nullptr;
-        }
+        // Validate parameters
+        ValidateNonEmptyString("output_dir", output_dir);
+        ValidateNonEmptyString("job_id", job_id);
 
         // Download all files
         std::vector<std::filesystem::path> downloaded_paths =
@@ -292,10 +272,10 @@ DATABENTO_API const char* dbento_batch_download_file(
             return nullptr;
         }
 
-        if (!output_dir || !job_id || !filename) {
-            SafeStrCopy(error_buffer, error_buffer_size, "Invalid parameters");
-            return nullptr;
-        }
+        // Validate parameters
+        ValidateNonEmptyString("output_dir", output_dir);
+        ValidateNonEmptyString("job_id", job_id);
+        ValidateNonEmptyString("filename", filename);
 
         // Download specific file
         std::filesystem::path downloaded_path =

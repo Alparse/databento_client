@@ -12,6 +12,9 @@
 
 namespace db = databento;
 using databento_native::SafeStrCopy;
+using databento_native::ParseSchema;
+using databento_native::ValidateNonEmptyString;
+using databento_native::ValidateSymbolArray;
 
 // ============================================================================
 // Internal Wrapper Class
@@ -137,10 +140,10 @@ DATABENTO_API int dbento_live_subscribe(
             return -1;
         }
 
-        if (!dataset || !schema) {
-            SafeStrCopy(error_buffer, error_buffer_size, "Dataset and schema cannot be null");
-            return -2;
-        }
+        // Validate parameters
+        ValidateNonEmptyString("dataset", dataset);
+        ValidateNonEmptyString("schema", schema);
+        ValidateSymbolArray(symbols, symbol_count);
 
         // Store dataset for client creation
         wrapper->dataset = dataset;
@@ -155,21 +158,8 @@ DATABENTO_API int dbento_live_subscribe(
             }
         }
 
-        // Parse schema from string to enum
-        db::Schema schema_enum;
-        std::string schema_str = schema;
-        if (schema_str == "mbo") schema_enum = db::Schema::Mbo;
-        else if (schema_str == "mbp-1") schema_enum = db::Schema::Mbp1;
-        else if (schema_str == "mbp-10") schema_enum = db::Schema::Mbp10;
-        else if (schema_str == "trades") schema_enum = db::Schema::Trades;
-        else if (schema_str == "ohlcv-1s") schema_enum = db::Schema::Ohlcv1S;
-        else if (schema_str == "ohlcv-1m") schema_enum = db::Schema::Ohlcv1M;
-        else if (schema_str == "ohlcv-1h") schema_enum = db::Schema::Ohlcv1H;
-        else if (schema_str == "ohlcv-1d") schema_enum = db::Schema::Ohlcv1D;
-        else {
-            SafeStrCopy(error_buffer, error_buffer_size, "Unknown schema type");
-            return -3;
-        }
+        // Parse schema from string to enum (centralized function, throws on error)
+        db::Schema schema_enum = ParseSchema(schema);
 
         // Create client now that we have the dataset
         if (!wrapper->client) {
@@ -465,10 +455,10 @@ DATABENTO_API int dbento_live_subscribe_with_snapshot(
             return -1;
         }
 
-        if (!dataset || !schema) {
-            SafeStrCopy(error_buffer, error_buffer_size, "Dataset and schema cannot be null");
-            return -2;
-        }
+        // Validate parameters
+        ValidateNonEmptyString("dataset", dataset);
+        ValidateNonEmptyString("schema", schema);
+        ValidateSymbolArray(symbols, symbol_count);
 
         // Store dataset if client not yet created
         if (wrapper->dataset.empty()) {
@@ -485,21 +475,8 @@ DATABENTO_API int dbento_live_subscribe_with_snapshot(
             }
         }
 
-        // Parse schema from string to enum
-        db::Schema schema_enum;
-        std::string schema_str = schema;
-        if (schema_str == "mbo") schema_enum = db::Schema::Mbo;
-        else if (schema_str == "mbp-1") schema_enum = db::Schema::Mbp1;
-        else if (schema_str == "mbp-10") schema_enum = db::Schema::Mbp10;
-        else if (schema_str == "trades") schema_enum = db::Schema::Trades;
-        else if (schema_str == "ohlcv-1s") schema_enum = db::Schema::Ohlcv1S;
-        else if (schema_str == "ohlcv-1m") schema_enum = db::Schema::Ohlcv1M;
-        else if (schema_str == "ohlcv-1h") schema_enum = db::Schema::Ohlcv1H;
-        else if (schema_str == "ohlcv-1d") schema_enum = db::Schema::Ohlcv1D;
-        else {
-            SafeStrCopy(error_buffer, error_buffer_size, "Unknown schema type");
-            return -3;
-        }
+        // Parse schema from string to enum (centralized function, throws on error)
+        db::Schema schema_enum = ParseSchema(schema);
 
         // Create client if needed
         if (!wrapper->client) {
