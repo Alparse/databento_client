@@ -66,7 +66,8 @@ public sealed class Metadata : IMetadata
 
         if (handlePtr == IntPtr.Zero)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Failed to create timeseries symbol map: {error}");
         }
 
@@ -92,7 +93,8 @@ public sealed class Metadata : IMetadata
 
         if (handlePtr == IntPtr.Zero)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Failed to create point-in-time symbol map: {error}");
         }
 

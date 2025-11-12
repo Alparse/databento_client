@@ -40,7 +40,8 @@ public sealed class DbnFileReader : IDbnFileReader
 
         if (handlePtr == IntPtr.Zero)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Failed to open DBN file: {error}");
         }
 
@@ -67,7 +68,8 @@ public sealed class DbnFileReader : IDbnFileReader
 
         if (jsonPtr == IntPtr.Zero)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Failed to get DBN file metadata: {error}");
         }
 
@@ -120,7 +122,8 @@ public sealed class DbnFileReader : IDbnFileReader
             if (result < 0)
             {
                 // Error occurred
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Error reading DBN file record: {error}");
             }
 

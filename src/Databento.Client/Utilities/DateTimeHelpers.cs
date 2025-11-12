@@ -21,9 +21,11 @@ public static class DateTimeHelpers
     /// </summary>
     /// <param name="dateTime">DateTimeOffset to convert</param>
     /// <returns>Unix timestamp in nanoseconds</returns>
+    /// <exception cref="OverflowException">Thrown when the timestamp cannot be represented as nanoseconds</exception>
     public static long ToUnixNanos(DateTimeOffset dateTime)
     {
-        return dateTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // HIGH FIX: Use checked arithmetic to prevent overflow for extreme dates
+        return checked(dateTime.ToUnixTimeMilliseconds() * 1_000_000);
     }
 
     /// <summary>
@@ -42,13 +44,15 @@ public static class DateTimeHelpers
     /// </summary>
     /// <param name="dateTime">DateTime to convert (will be treated as UTC if unspecified)</param>
     /// <returns>Unix timestamp in nanoseconds</returns>
+    /// <exception cref="OverflowException">Thrown when the timestamp cannot be represented as nanoseconds</exception>
     public static long ToUnixNanos(DateTime dateTime)
     {
         var utcDateTime = dateTime.Kind == DateTimeKind.Unspecified
             ? DateTime.SpecifyKind(dateTime, DateTimeKind.Utc)
             : dateTime.ToUniversalTime();
 
-        return (long)(utcDateTime - DateTime.UnixEpoch).TotalMilliseconds * 1_000_000;
+        // HIGH FIX: Use checked arithmetic to prevent overflow for extreme dates
+        return checked((long)(utcDateTime - DateTime.UnixEpoch).TotalMilliseconds * 1_000_000);
     }
 
     /// <summary>

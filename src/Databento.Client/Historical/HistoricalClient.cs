@@ -59,7 +59,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
         if (handlePtr == IntPtr.Zero)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Failed to create historical client: {error}");
         }
 
@@ -84,10 +85,12 @@ public sealed class HistoricalClient : IHistoricalClient
 
         var channel = Channel.CreateUnbounded<Record>();
         var symbolArray = symbols.ToArray();
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
 
-        // Convert times to nanoseconds since epoch
-        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
-        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // Convert times to nanoseconds since epoch (HIGH FIX: using checked arithmetic)
+        long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
+        long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
         // CRITICAL FIX: Create callback and store it to prevent GC
         var callbackId = Guid.NewGuid();
@@ -167,7 +170,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
                 if (result != 0)
                 {
-                    var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                    // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                     throw new DbentoException($"Historical query failed: {error}", result);
                 }
             }
@@ -206,10 +210,12 @@ public sealed class HistoricalClient : IHistoricalClient
             throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
 
         var symbolArray = symbols.ToArray();
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
 
-        // Convert times to nanoseconds since epoch
-        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
-        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // Convert times to nanoseconds since epoch (HIGH FIX: using checked arithmetic)
+        long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
+        long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
         return await Task.Run(() =>
         {
@@ -229,7 +235,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (result != 0)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to save historical data to file: {error}", result);
             }
 
@@ -249,9 +256,9 @@ public sealed class HistoricalClient : IHistoricalClient
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        // Convert times to nanoseconds since epoch
-        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
-        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // Convert times to nanoseconds since epoch (HIGH FIX: using checked arithmetic)
+        long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
+        long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
         byte[] errorBuffer = new byte[512];
 
@@ -293,7 +300,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to list publishers: {error}");
             }
 
@@ -327,7 +335,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to list datasets: {error}");
             }
 
@@ -361,7 +370,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to list schemas: {error}");
             }
 
@@ -401,7 +411,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to list fields: {error}");
             }
 
@@ -435,7 +446,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to get dataset condition: {error}");
             }
 
@@ -469,7 +481,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to get dataset range: {error}");
             }
 
@@ -500,8 +513,11 @@ public sealed class HistoricalClient : IHistoricalClient
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var symbolArray = symbols.ToArray();
-        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
-        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
+        // HIGH FIX: Use checked arithmetic via helper
+        long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
+        long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
         return await Task.Run(() =>
         {
@@ -520,7 +536,8 @@ public sealed class HistoricalClient : IHistoricalClient
             // If count is ulong.MaxValue, an error occurred
             if (count == ulong.MaxValue)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to get record count: {error}");
             }
 
@@ -542,8 +559,11 @@ public sealed class HistoricalClient : IHistoricalClient
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var symbolArray = symbols.ToArray();
-        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
-        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
+        // HIGH FIX: Use checked arithmetic via helper
+        long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
+        long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
         return await Task.Run(() =>
         {
@@ -562,7 +582,8 @@ public sealed class HistoricalClient : IHistoricalClient
             // If size is ulong.MaxValue, an error occurred
             if (size == ulong.MaxValue)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to get billable size: {error}");
             }
 
@@ -584,8 +605,11 @@ public sealed class HistoricalClient : IHistoricalClient
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var symbolArray = symbols.ToArray();
-        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
-        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
+        // HIGH FIX: Use checked arithmetic via helper
+        long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
+        long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
         return await Task.Run(() =>
         {
@@ -603,7 +627,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (costPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to get cost: {error}");
             }
 
@@ -633,8 +658,11 @@ public sealed class HistoricalClient : IHistoricalClient
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var symbolArray = symbols.ToArray();
-        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
-        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
+        // HIGH FIX: Use checked arithmetic via helper
+        long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
+        long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
         return await Task.Run(() =>
         {
@@ -652,7 +680,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to get billing info: {error}");
             }
 
@@ -695,7 +724,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (handlePtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to get unit prices: {error}");
             }
 
@@ -758,8 +788,11 @@ public sealed class HistoricalClient : IHistoricalClient
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var symbolArray = symbols.ToArray();
-        long startTimeNs = startTime.ToUnixTimeMilliseconds() * 1_000_000;
-        long endTimeNs = endTime.ToUnixTimeMilliseconds() * 1_000_000;
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
+        // HIGH FIX: Use checked arithmetic via helper
+        long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
+        long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
         return await Task.Run(() =>
         {
@@ -777,7 +810,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to submit batch job: {error}");
             }
 
@@ -841,7 +875,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to list batch jobs: {error}");
             }
 
@@ -897,7 +932,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to list batch files: {error}");
             }
 
@@ -936,7 +972,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (jsonPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to download batch files: {error}");
             }
 
@@ -977,7 +1014,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (pathPtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to download batch file: {error}");
             }
 
@@ -1020,6 +1058,8 @@ public sealed class HistoricalClient : IHistoricalClient
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             var symbolArray = symbols.ToArray();
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
             if (symbolArray.Length == 0)
             {
                 throw new ArgumentException("Symbols collection cannot be empty", nameof(symbols));
@@ -1049,7 +1089,8 @@ public sealed class HistoricalClient : IHistoricalClient
 
             if (handlePtr == IntPtr.Zero)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 throw new DbentoException($"Failed to resolve symbology: {error}");
             }
 

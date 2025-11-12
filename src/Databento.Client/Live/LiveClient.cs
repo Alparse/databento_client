@@ -24,7 +24,8 @@ public sealed class LiveClient : ILiveClient
     private readonly VersionUpgradePolicy _upgradePolicy;
     private readonly TimeSpan _heartbeatInterval;
     private readonly string _apiKey;
-    private readonly List<(string dataset, Schema schema, string[] symbols, bool withSnapshot)> _subscriptions;
+    // HIGH FIX: Use thread-safe collection for concurrent subscription operations
+    private readonly System.Collections.Concurrent.ConcurrentBag<(string dataset, Schema schema, string[] symbols, bool withSnapshot)> _subscriptions;
     private Task? _streamTask;
     // CRITICAL FIX: Use atomic int for disposal state (0=active, 1=disposing, 2=disposed)
     private int _disposeState = 0;
@@ -83,7 +84,7 @@ public sealed class LiveClient : ILiveClient
         _sendTsOut = sendTsOut;
         _upgradePolicy = upgradePolicy;
         _heartbeatInterval = heartbeatInterval;
-        _subscriptions = new List<(string, Schema, string[], bool)>();
+        _subscriptions = new System.Collections.Concurrent.ConcurrentBag<(string, Schema, string[], bool)>();
         _connectionState = ConnectionState.Disconnected;
 
         // Create channel for streaming records
@@ -115,7 +116,8 @@ public sealed class LiveClient : ILiveClient
 
         if (handlePtr == IntPtr.Zero)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Failed to create live client: {error}");
         }
 
@@ -134,6 +136,8 @@ public sealed class LiveClient : ILiveClient
         ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         var symbolArray = symbols.ToArray();
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
         byte[] errorBuffer = new byte[512];
 
         var result = NativeMethods.dbento_live_subscribe(
@@ -147,7 +151,8 @@ public sealed class LiveClient : ILiveClient
 
         if (result != 0)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Subscription failed: {error}", result);
         }
 
@@ -169,6 +174,8 @@ public sealed class LiveClient : ILiveClient
         ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         var symbolArray = symbols.ToArray();
+        // HIGH FIX: Validate symbol array elements
+        Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
         byte[] errorBuffer = new byte[512];
 
         // Use native subscribe with snapshot support
@@ -183,7 +190,8 @@ public sealed class LiveClient : ILiveClient
 
         if (result != 0)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Subscription with snapshot failed: {error}", result);
         }
 
@@ -220,7 +228,8 @@ public sealed class LiveClient : ILiveClient
 
             if (result != 0)
             {
-                var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+                // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 _connectionState = ConnectionState.Disconnected;
                 throw new DbentoException($"Start failed: {error}", result);
             }
@@ -277,7 +286,8 @@ public sealed class LiveClient : ILiveClient
 
         if (result != 0)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             _connectionState = ConnectionState.Disconnected;
             throw new DbentoException($"Reconnect failed: {error}", result);
         }
@@ -298,7 +308,8 @@ public sealed class LiveClient : ILiveClient
 
         if (result != 0)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Resubscription failed: {error}", result);
         }
 

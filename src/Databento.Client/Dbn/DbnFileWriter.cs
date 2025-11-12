@@ -45,7 +45,8 @@ public sealed class DbnFileWriter : IDbnFileWriter
 
         if (handlePtr == IntPtr.Zero)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Failed to create DBN file: {error}");
         }
 
@@ -75,7 +76,8 @@ public sealed class DbnFileWriter : IDbnFileWriter
 
         if (result != 0)
         {
-            var error = System.Text.Encoding.UTF8.GetString(errorBuffer).TrimEnd('\0');
+            // HIGH FIX: Use safe error string extraction
+            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             throw new DbentoException($"Failed to write record to DBN file: {error}");
         }
     }
