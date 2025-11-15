@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Databento.Client.Metadata;
 using Databento.Client.Models;
@@ -10,6 +11,7 @@ using Databento.Client.Models.Symbology;
 using Databento.Interop;
 using Databento.Interop.Handles;
 using Databento.Interop.Native;
+using Microsoft.Extensions.Logging;
 
 namespace Databento.Client.Historical;
 
@@ -25,13 +27,21 @@ public sealed class HistoricalClient : IHistoricalClient
     private readonly VersionUpgradePolicy _upgradePolicy;
     private readonly string? _userAgent;
     private readonly TimeSpan _timeout;
-    private bool _disposed;
+    private readonly ILogger<IHistoricalClient>? _logger;
+    // MEDIUM FIX: Use atomic int for disposal state (0=active, 1=disposing, 2=disposed)
+    private int _disposeState = 0;
 
     // CRITICAL FIX: Store active callbacks to prevent GC collection
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, RecordCallbackDelegate> _activeCallbacks = new();
 
+    // JSON serialization options for enum deserialization
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     internal HistoricalClient(string apiKey)
-        : this(apiKey, HistoricalGateway.Bo1, null, null, VersionUpgradePolicy.Upgrade, null, TimeSpan.FromSeconds(30))
+        : this(apiKey, HistoricalGateway.Bo1, null, null, VersionUpgradePolicy.Upgrade, null, TimeSpan.FromSeconds(30), null)
     {
     }
 
@@ -42,7 +52,8 @@ public sealed class HistoricalClient : IHistoricalClient
         ushort? customPort,
         VersionUpgradePolicy upgradePolicy,
         string? userAgent,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        ILogger<IHistoricalClient>? logger = null)
     {
         if (string.IsNullOrEmpty(apiKey))
             throw new ArgumentException("API key cannot be null or empty", nameof(apiKey));
@@ -53,18 +64,26 @@ public sealed class HistoricalClient : IHistoricalClient
         _upgradePolicy = upgradePolicy;
         _userAgent = userAgent;
         _timeout = timeout;
+        _logger = logger;
 
-        byte[] errorBuffer = new byte[512];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var handlePtr = NativeMethods.dbento_historical_create(apiKey, errorBuffer, (nuint)errorBuffer.Length);
 
         if (handlePtr == IntPtr.Zero)
         {
             // HIGH FIX: Use safe error string extraction
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
+            _logger?.LogError("Failed to create HistoricalClient: {Error}", error);
             throw new DbentoException($"Failed to create historical client: {error}");
         }
 
         _handle = new HistoricalClientHandle(handlePtr);
+
+        _logger?.LogInformation(
+            "HistoricalClient created successfully. Gateway={Gateway}, UpgradePolicy={UpgradePolicy}, Timeout={Timeout}s",
+            gateway,
+            upgradePolicy,
+            (int)timeout.TotalSeconds);
 
         // Note: Gateway, upgrade policy, and other settings are stored for future use
         // when native layer supports configuration. For now, defaults are used.
@@ -81,7 +100,7 @@ public sealed class HistoricalClient : IHistoricalClient
         DateTimeOffset endTime,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -91,6 +110,14 @@ public sealed class HistoricalClient : IHistoricalClient
         var symbolArray = symbols.ToArray();
         // HIGH FIX: Validate symbol array elements
         Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
+
+        _logger?.LogInformation(
+            "Starting historical query. Dataset={Dataset}, Schema={Schema}, SymbolCount={SymbolCount}, Start={Start}, End={End}",
+            dataset,
+            schema,
+            symbolArray.Length,
+            startTime,
+            endTime);
 
         // Convert times to nanoseconds since epoch (HIGH FIX: using checked arithmetic)
         long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
@@ -108,28 +135,31 @@ public sealed class HistoricalClient : IHistoricalClient
                     // CRITICAL FIX: Validate pointer before dereferencing
                     if (recordBytes == null)
                     {
-                        System.Diagnostics.Debug.WriteLine("Error: Received null pointer from native code");
+                        var ex = new DbentoException("Received null pointer from native code");
+                        channel.Writer.Complete(ex);
                         return;
                     }
 
                     // CRITICAL FIX: Validate length to prevent integer overflow
                     if (recordLength == 0)
                     {
-                        System.Diagnostics.Debug.WriteLine("Error: Received zero-length record");
+                        var ex = new DbentoException("Received zero-length record");
+                        channel.Writer.Complete(ex);
                         return;
                     }
 
                     if (recordLength > int.MaxValue)
                     {
-                        System.Diagnostics.Debug.WriteLine($"Error: Record too large: {recordLength} bytes exceeds maximum {int.MaxValue}");
+                        var ex = new DbentoException($"Record too large: {recordLength} bytes exceeds maximum {int.MaxValue}");
+                        channel.Writer.Complete(ex);
                         return;
                     }
 
                     // Sanity check: reasonable maximum record size (10MB)
-                    const int MaxReasonableRecordSize = 10 * 1024 * 1024;
-                    if (recordLength > MaxReasonableRecordSize)
+                    if (recordLength > Utilities.Constants.MaxReasonableRecordSize)
                     {
-                        System.Diagnostics.Debug.WriteLine($"Error: Record suspiciously large: {recordLength} bytes");
+                        var ex = new DbentoException($"Record suspiciously large: {recordLength} bytes");
+                        channel.Writer.Complete(ex);
                         return;
                     }
 
@@ -160,7 +190,7 @@ public sealed class HistoricalClient : IHistoricalClient
             try
             {
                 // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
                 var result = NativeMethods.dbento_historical_get_range(
                     _handle,
@@ -179,7 +209,8 @@ public sealed class HistoricalClient : IHistoricalClient
                 {
                     // HIGH FIX: Use safe error string extraction
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
-                    throw new DbentoException($"Historical query failed: {error}", result);
+                    // MEDIUM FIX: Use exception factory method for proper exception type mapping
+                    throw DbentoException.CreateFromErrorCode($"Historical query failed: {error}", result);
                 }
             }
             finally
@@ -211,7 +242,7 @@ public sealed class HistoricalClient : IHistoricalClient
         DateTimeOffset endTime,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
@@ -231,7 +262,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
             var result = NativeMethods.dbento_historical_get_range_to_file(
                 _handle,
@@ -249,7 +280,8 @@ public sealed class HistoricalClient : IHistoricalClient
             {
                 // HIGH FIX: Use safe error string extraction
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
-                throw new DbentoException($"Failed to save historical data to file: {error}", result);
+                // MEDIUM FIX: Use exception factory method for proper exception type mapping
+                throw DbentoException.CreateFromErrorCode($"Failed to save historical data to file: {error}", result);
             }
 
             return filePath;
@@ -266,7 +298,7 @@ public sealed class HistoricalClient : IHistoricalClient
         DateTimeOffset startTime,
         DateTimeOffset endTime)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -275,7 +307,7 @@ public sealed class HistoricalClient : IHistoricalClient
         long startTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(startTime);
         long endTimeNs = Utilities.DateTimeHelpers.ToUnixNanos(endTime);
 
-        byte[] errorBuffer = new byte[512];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
         var metadataHandle = NativeMethods.dbento_historical_get_metadata(
             _handle,
@@ -305,12 +337,12 @@ public sealed class HistoricalClient : IHistoricalClient
     public async Task<IReadOnlyList<PublisherDetail>> ListPublishersAsync(
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_metadata_list_publishers(
                 _handle, errorBuffer, (nuint)errorBuffer.Length);
 
@@ -348,20 +380,27 @@ public sealed class HistoricalClient : IHistoricalClient
         string? venue = null,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_metadata_list_datasets(
                 _handle, venue, errorBuffer, (nuint)errorBuffer.Length);
 
             if (jsonPtr == IntPtr.Zero)
             {
                 // HIGH FIX: Use safe error string extraction
-            var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
-                throw new DbentoException($"Failed to list datasets: {error}");
+                var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
+                var statusCode = Utilities.ErrorBufferHelpers.ExtractStatusCode(error);
+                var message = $"Failed to list datasets: {error}";
+
+                // Use factory method to create appropriate exception type based on status code
+                if (statusCode.HasValue)
+                    throw DbentoException.CreateFromErrorCode(message, statusCode.Value);
+                else
+                    throw new DbentoException(message);
             }
 
             try
@@ -391,7 +430,7 @@ public sealed class HistoricalClient : IHistoricalClient
         string dataset,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -399,7 +438,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_metadata_list_schemas(
                 _handle, dataset, errorBuffer, (nuint)errorBuffer.Length);
 
@@ -438,12 +477,12 @@ public sealed class HistoricalClient : IHistoricalClient
         Schema schema,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_metadata_list_fields(
                 _handle,
                 encoding.ToEncodingString(),
@@ -485,7 +524,7 @@ public sealed class HistoricalClient : IHistoricalClient
         string dataset,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -493,7 +532,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_metadata_get_dataset_condition(
                 _handle, dataset, errorBuffer, (nuint)errorBuffer.Length);
 
@@ -507,8 +546,53 @@ public sealed class HistoricalClient : IHistoricalClient
             try
             {
                 var json = Marshal.PtrToStringUTF8(jsonPtr) ?? "{}";
-                return JsonSerializer.Deserialize<DatasetConditionInfo>(json)
+                return JsonSerializer.Deserialize<DatasetConditionInfo>(json, JsonOptions)
                     ?? throw new DbentoException("Failed to deserialize dataset condition");
+            }
+            finally
+            {
+                NativeMethods.dbento_free_string(jsonPtr);
+            }
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Get dataset condition for a specific date range
+    /// </summary>
+    public async Task<IReadOnlyList<DatasetConditionDetail>> GetDatasetConditionAsync(
+        string dataset,
+        DateTimeOffset startDate,
+        DateTimeOffset? endDate = null,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
+
+        // MEDIUM FIX: Validate input parameters
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
+
+        return await Task.Run(() =>
+        {
+            // Convert dates to ISO 8601 format (YYYY-MM-DD)
+            string startDateStr = startDate.ToString("yyyy-MM-dd");
+            string? endDateStr = endDate?.ToString("yyyy-MM-dd");
+
+            // MEDIUM FIX: Increased from 512 to 2048 for full error context
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
+            var jsonPtr = NativeMethods.dbento_metadata_get_dataset_condition_with_date_range(
+                _handle, dataset, startDateStr, endDateStr, errorBuffer, (nuint)errorBuffer.Length);
+
+            if (jsonPtr == IntPtr.Zero)
+            {
+                // HIGH FIX: Use safe error string extraction
+                var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
+                throw new DbentoException($"Failed to get dataset condition: {error}");
+            }
+
+            try
+            {
+                var json = Marshal.PtrToStringUTF8(jsonPtr) ?? "[]";
+                return JsonSerializer.Deserialize<List<DatasetConditionDetail>>(json, JsonOptions)
+                    ?? throw new DbentoException("Failed to deserialize dataset condition details");
             }
             finally
             {
@@ -524,7 +608,7 @@ public sealed class HistoricalClient : IHistoricalClient
         string dataset,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -532,7 +616,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_metadata_get_dataset_range(
                 _handle, dataset, errorBuffer, (nuint)errorBuffer.Length);
 
@@ -546,7 +630,7 @@ public sealed class HistoricalClient : IHistoricalClient
             try
             {
                 var json = Marshal.PtrToStringUTF8(jsonPtr) ?? "{}";
-                return JsonSerializer.Deserialize<DatasetRange>(json)
+                return JsonSerializer.Deserialize<DatasetRange>(json, JsonOptions)
                     ?? throw new DbentoException("Failed to deserialize dataset range");
             }
             finally
@@ -567,7 +651,7 @@ public sealed class HistoricalClient : IHistoricalClient
         IEnumerable<string> symbols,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -583,7 +667,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var count = NativeMethods.dbento_metadata_get_record_count(
                 _handle,
                 dataset,
@@ -618,7 +702,7 @@ public sealed class HistoricalClient : IHistoricalClient
         IEnumerable<string> symbols,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -634,7 +718,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var size = NativeMethods.dbento_metadata_get_billable_size(
                 _handle,
                 dataset,
@@ -669,7 +753,7 @@ public sealed class HistoricalClient : IHistoricalClient
         IEnumerable<string> symbols,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -685,7 +769,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var costPtr = NativeMethods.dbento_metadata_get_cost(
                 _handle,
                 dataset,
@@ -727,7 +811,7 @@ public sealed class HistoricalClient : IHistoricalClient
         IEnumerable<string> symbols,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -743,7 +827,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_metadata_get_billing_info(
                 _handle,
                 dataset,
@@ -789,9 +873,9 @@ public sealed class HistoricalClient : IHistoricalClient
 
         return Task.Run(() =>
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
-            byte[] errorBuffer = new byte[1024];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
             var handlePtr = NativeMethods.dbento_historical_list_unit_prices(
                 _handle,
@@ -816,7 +900,14 @@ public sealed class HistoricalClient : IHistoricalClient
                 int modeValue = NativeMethods.dbento_unit_prices_get_mode(handlePtr, i);
                 if (modeValue < 0) continue;
 
-                var mode = (PricingMode)modeValue;
+                // LOW FIX: Validate mode value is within enum range (PricingMode is byte-based)
+                if (modeValue > byte.MaxValue || !Enum.IsDefined(typeof(PricingMode), (byte)modeValue))
+                {
+                    // Skip invalid mode value rather than crashing
+                    continue;
+                }
+
+                var mode = (PricingMode)(byte)modeValue;
                 var unitPricesDict = new Dictionary<Schema, decimal>();
 
                 nuint schemaCount = NativeMethods.dbento_unit_prices_get_schema_count(handlePtr, i);
@@ -830,7 +921,15 @@ public sealed class HistoricalClient : IHistoricalClient
 
                     if (resultCode == 0)
                     {
-                        var schema = (Schema)schemaValue;
+                        // LOW FIX: Validate schema value is within enum range (Schema is ushort-based)
+                        if (schemaValue < 0 || schemaValue > ushort.MaxValue ||
+                            !Enum.IsDefined(typeof(Schema), (ushort)schemaValue))
+                        {
+                            // Skip invalid schema value rather than crashing
+                            continue;
+                        }
+
+                        var schema = (Schema)(ushort)schemaValue;
                         unitPricesDict[schema] = (decimal)price;
                     }
                 }
@@ -862,7 +961,7 @@ public sealed class HistoricalClient : IHistoricalClient
         DateTimeOffset endTime,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // MEDIUM FIX: Validate input parameters
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
@@ -878,7 +977,7 @@ public sealed class HistoricalClient : IHistoricalClient
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_batch_submit_job(
                 _handle,
                 dataset,
@@ -914,6 +1013,14 @@ public sealed class HistoricalClient : IHistoricalClient
     /// Submit a new batch job with advanced options for bulk historical data download.
     /// WARNING: This operation will incur a cost.
     /// </summary>
+    /// <remarks>
+    /// LOW FIX: This method is currently a stub that delegates to the basic version.
+    /// Advanced parameters (encoding, compression, prettyPx, etc.) are not yet implemented
+    /// and will be ignored. This functionality requires additional native wrapper implementation.
+    /// For now, use the basic <see cref="BatchSubmitJobAsync(string, IEnumerable{string}, Schema, DateTimeOffset, DateTimeOffset, CancellationToken)"/>
+    /// method which provides full functionality with default options.
+    /// </remarks>
+    [Obsolete("This overload is not yet fully implemented. Use the basic BatchSubmitJobAsync method instead. Advanced parameters are currently ignored.", false)]
     public async Task<BatchJob> BatchSubmitJobAsync(
         string dataset,
         IEnumerable<string> symbols,
@@ -938,7 +1045,7 @@ public sealed class HistoricalClient : IHistoricalClient
         ArgumentException.ThrowIfNullOrWhiteSpace(dataset, nameof(dataset));
         ArgumentNullException.ThrowIfNull(symbols, nameof(symbols));
 
-        // For now, delegate to basic version with defaults
+        // LOW FIX: Documented stub - delegates to basic version with defaults
         // Advanced version would require additional native wrapper implementation
         return await BatchSubmitJobAsync(dataset, symbols, schema, startTime, endTime, cancellationToken);
     }
@@ -949,12 +1056,12 @@ public sealed class HistoricalClient : IHistoricalClient
     public async Task<IReadOnlyList<BatchJob>> BatchListJobsAsync(
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_batch_list_jobs(
                 _handle,
                 errorBuffer,
@@ -1013,12 +1120,12 @@ public sealed class HistoricalClient : IHistoricalClient
         string jobId,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_batch_list_files(
                 _handle,
                 jobId,
@@ -1060,12 +1167,12 @@ public sealed class HistoricalClient : IHistoricalClient
         string jobId,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var jsonPtr = NativeMethods.dbento_batch_download_all(
                 _handle,
                 outputDir,
@@ -1109,12 +1216,12 @@ public sealed class HistoricalClient : IHistoricalClient
         string filename,
         CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         return await Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-            byte[] errorBuffer = new byte[2048];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
             var pathPtr = NativeMethods.dbento_batch_download_file(
                 _handle,
                 outputDir,
@@ -1166,7 +1273,7 @@ public sealed class HistoricalClient : IHistoricalClient
 
         return Task.Run(() =>
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
             var symbolArray = symbols.ToArray();
         // HIGH FIX: Validate symbol array elements
@@ -1176,7 +1283,7 @@ public sealed class HistoricalClient : IHistoricalClient
                 throw new ArgumentException("Symbols collection cannot be empty", nameof(symbols));
             }
 
-            byte[] errorBuffer = new byte[1024];
+            byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
             // Convert SType enums to strings (lowercase with underscores)
             string stypeInStr = ConvertStypeToString(stypeIn);
@@ -1316,10 +1423,15 @@ public sealed class HistoricalClient : IHistoricalClient
 
     public ValueTask DisposeAsync()
     {
-        if (_disposed) return ValueTask.CompletedTask;
+        // MEDIUM FIX: Atomic state transition (0=active -> 1=disposing -> 2=disposed)
+        // If already disposing or disposed, return immediately
+        if (Interlocked.CompareExchange(ref _disposeState, 1, 0) != 0)
+            return ValueTask.CompletedTask;
 
-        _disposed = true;
         _handle?.Dispose();
+
+        // Mark as fully disposed
+        Interlocked.Exchange(ref _disposeState, 2);
 
         return ValueTask.CompletedTask;
     }

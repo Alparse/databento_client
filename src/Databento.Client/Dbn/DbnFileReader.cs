@@ -16,7 +16,8 @@ public sealed class DbnFileReader : IDbnFileReader
 {
     private readonly DbnFileReaderHandle _handle;
     private DbnMetadata? _cachedMetadata;
-    private bool _disposed;
+    // MEDIUM FIX: Use atomic int for disposal state (0=active, 1=disposing, 2=disposed)
+    private int _disposeState = 0;
 
     /// <summary>
     /// Open a DBN file for reading
@@ -33,7 +34,7 @@ public sealed class DbnFileReader : IDbnFileReader
             throw new FileNotFoundException($"DBN file not found: {filePath}", filePath);
 
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var handlePtr = NativeMethods.dbento_dbn_file_open(
             filePath,
             errorBuffer,
@@ -55,14 +56,14 @@ public sealed class DbnFileReader : IDbnFileReader
     /// <returns>DBN file metadata</returns>
     public DbnMetadata GetMetadata()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // Return cached metadata if available
         if (_cachedMetadata != null)
             return _cachedMetadata;
 
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var jsonPtr = NativeMethods.dbento_dbn_file_get_metadata(
             _handle,
             errorBuffer,
@@ -96,12 +97,12 @@ public sealed class DbnFileReader : IDbnFileReader
     public async IAsyncEnumerable<Record> ReadRecordsAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
 
         // Use a reasonably large buffer for records
-        byte[] recordBuffer = new byte[8192];
-        // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] recordBuffer = new byte[Utilities.Constants.RecordBufferSize];
+        // Error buffer for native calls
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
         await Task.Yield(); // Make it properly async
 
@@ -166,10 +167,15 @@ public sealed class DbnFileReader : IDbnFileReader
     /// </summary>
     public void Dispose()
     {
-        if (_disposed) return;
+        // MEDIUM FIX: Atomic state transition (0=active -> 1=disposing -> 2=disposed)
+        // If already disposing or disposed, return immediately
+        if (Interlocked.CompareExchange(ref _disposeState, 1, 0) != 0)
+            return;
 
-        _disposed = true;
         _handle?.Dispose();
+
+        // Mark as fully disposed
+        Interlocked.Exchange(ref _disposeState, 2);
     }
 
     /// <summary>

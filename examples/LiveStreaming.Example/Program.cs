@@ -34,7 +34,15 @@ class Program
             // Subscribe to data received events
             client.DataReceived += (sender, e) =>
             {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Received: {e.Record}");
+                // Show RType for unknown records to help debug
+                if (e.Record is UnknownRecord unknown)
+                {
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Received: UnknownRecord (RType=0x{e.Record.RType:X2}, {unknown.RawData?.Length ?? 0} bytes)");
+                }
+                else
+                {
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Received: {e.Record}");
+                }
             };
 
             // Subscribe to error events
@@ -63,8 +71,8 @@ class Program
                 // Process records here
                 count++;
 
-                // Stop after 100 records for demo purposes
-                if (count >= 10000000)
+                // LOW FIX: Stop after 100 records for demo purposes
+                if (count >= 100)
                 {
                     Console.WriteLine($"\n✓ Received {count} records, stopping...");
                     break;

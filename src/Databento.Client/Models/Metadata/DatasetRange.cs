@@ -16,6 +16,12 @@ public class DatasetRange
     public DateTimeOffset End { get; set; }
 
     /// <summary>
+    /// Per-schema date ranges (optional)
+    /// Maps schema name to its specific start and end timestamps
+    /// </summary>
+    public Dictionary<string, SchemaDateRange>? RangeBySchema { get; set; }
+
+    /// <summary>
     /// Duration of available data
     /// </summary>
     public TimeSpan Duration => End - Start;

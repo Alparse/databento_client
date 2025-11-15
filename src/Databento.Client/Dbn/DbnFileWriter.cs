@@ -15,7 +15,8 @@ public sealed class DbnFileWriter : IDbnFileWriter
 {
     private readonly DbnFileWriterHandle _handle;
     private readonly string _filePath;
-    private bool _disposed;
+    // MEDIUM FIX: Use atomic int for disposal state (0=active, 1=disposing, 2=disposed)
+    private int _disposeState = 0;
 
     /// <summary>
     /// Create a new DBN file writer
@@ -37,7 +38,7 @@ public sealed class DbnFileWriter : IDbnFileWriter
         string metadataJson = JsonSerializer.Serialize(metadata);
 
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var handlePtr = NativeMethods.dbento_dbn_file_create(
             filePath,
             metadataJson,
@@ -60,7 +61,7 @@ public sealed class DbnFileWriter : IDbnFileWriter
     /// <param name="record">Record to write</param>
     public void WriteRecord(Record record)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
         ArgumentNullException.ThrowIfNull(record);
 
         if (record.RawBytes == null || record.RawBytes.Length == 0)
@@ -68,7 +69,7 @@ public sealed class DbnFileWriter : IDbnFileWriter
                 "Only records read from DBN files can be written.");
 
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         int result = NativeMethods.dbento_dbn_file_write_record(
             _handle,
             record.RawBytes,
@@ -90,7 +91,7 @@ public sealed class DbnFileWriter : IDbnFileWriter
     /// <param name="records">Records to write</param>
     public void WriteRecords(IEnumerable<Record> records)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
         ArgumentNullException.ThrowIfNull(records);
 
         foreach (var record in records)
@@ -104,7 +105,7 @@ public sealed class DbnFileWriter : IDbnFileWriter
     /// </summary>
     public void Flush()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Interlocked.CompareExchange(ref _disposeState, 0, 0) != 0, this);
         // The native layer automatically flushes on write
         // This method is provided for API consistency
     }
@@ -114,10 +115,15 @@ public sealed class DbnFileWriter : IDbnFileWriter
     /// </summary>
     public void Dispose()
     {
-        if (_disposed) return;
+        // MEDIUM FIX: Atomic state transition (0=active -> 1=disposing -> 2=disposed)
+        // If already disposing or disposed, return immediately
+        if (Interlocked.CompareExchange(ref _disposeState, 1, 0) != 0)
+            return;
 
-        _disposed = true;
         _handle?.Dispose();
+
+        // Mark as fully disposed
+        Interlocked.Exchange(ref _disposeState, 2);
     }
 
     /// <summary>

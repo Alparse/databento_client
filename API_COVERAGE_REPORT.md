@@ -214,6 +214,97 @@ To reach 100% completion:
 6. Additional code examples and tutorials
 7. Advanced file format utilities
 
+## C++ to C# API Differences
+
+This section documents intentional differences between the databento-cpp and Databento.NET APIs due to language idioms and best practices.
+
+### Price Formatting
+
+**C++**: Uses `databento::pretty::Px` wrapper type for formatting fixed-precision prices
+```cpp
+std::cout << std::setprecision(2)
+          << databento::pretty::Px{4'149'500'000'000} << '\n';
+// Output: 4149.50
+```
+
+**C#**: Built-in `PriceDecimal` property on all message types
+```csharp
+Console.WriteLine($"{tradeMsg.PriceDecimal:F2}");
+// Output: 4149.50
+
+// Or with more control
+Console.WriteLine($"{tradeMsg.PriceDecimal:N9}");  // 9 decimal places
+Console.WriteLine($"{tradeMsg.PriceDecimal:C}");   // Currency format
+```
+
+**Implementation**: All message types with price fields (TradeMessage, MboMessage, BboMessage, etc.) have `PriceDecimal` properties that convert the fixed-point int64 value (1e-9 precision) to C# decimal type.
+
+**Rationale**: C# has native 128-bit decimal type designed for financial calculations and rich string formatting via interpolation. No separate Pretty helper class is needed.
+
+### Type Casting and Pattern Matching
+
+**C++**: Template-based `Get<T>()` method with pointer semantics
+```cpp
+if (auto trade = record->Get<databento::TradeMsg>()) {
+    std::cout << trade->price << '\n';
+}
+```
+
+**C#**: Pattern matching with `is` operator
+```csharp
+if (record is TradeMessage tradeMsg)
+{
+    Console.WriteLine(tradeMsg.PriceDecimal);
+}
+```
+
+**Rationale**: C# pattern matching is more idiomatic and provides compile-time type safety.
+
+### Callback Return Values
+
+**C++**: `databento::KeepGoing` enum (Continue/Stop)
+```cpp
+return databento::KeepGoing::Continue;
+```
+
+**C#**: Boolean values
+```csharp
+return true;  // Continue processing
+return false; // Stop processing
+```
+
+**Rationale**: C# boolean semantics are clearer and more conventional for control flow.
+
+### Null Handling
+
+**C++**: `nullptr` with pointer types
+```cpp
+const databento::Record* record = store.NextRecord();
+if (record == nullptr) break;
+```
+
+**C#**: Nullable reference types with `null`
+```csharp
+Record? record = store.NextRecord();
+if (record == null) break;
+```
+
+**Rationale**: C# nullable reference types (enabled project-wide) provide compile-time null safety.
+
+### Naming Conventions
+
+**C++**: Abbreviated type names
+- `TradeMsg`, `MboMsg`, `BboMsg`
+- `TsEvent` (timestamp event)
+- `Px` (price)
+
+**C#**: Full descriptive names
+- `TradeMessage`, `MboMessage`, `BboMessage`
+- `Timestamp` property
+- `PriceDecimal` property
+
+**Rationale**: C# naming conventions favor clarity over brevity. IntelliSense makes longer names discoverable without typing overhead.
+
 ## Notes
 
 - All core functionality for historical data analysis is complete

@@ -41,13 +41,15 @@ public sealed class PitSymbolMap : IPitSymbolMap
     /// <summary>
     /// Number of mappings in the symbol map
     /// </summary>
+    /// <exception cref="OverflowException">If the map contains more than Int32.MaxValue entries</exception>
     public int Size
     {
         get
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             nuint size = NativeMethods.dbento_pit_symbol_map_size(_handle);
-            return (int)size;
+            // OPTIONAL FIX: Checked cast prevents silent overflow if native returns huge values
+            return checked((int)size);
         }
     }
 
@@ -90,6 +92,24 @@ public sealed class PitSymbolMap : IPitSymbolMap
     }
 
     /// <summary>
+    /// Find symbol for a record (convenience method that extracts instrument ID)
+    /// </summary>
+    public string? Find(Record record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return Find(record.InstrumentId);
+    }
+
+    /// <summary>
+    /// Get symbol for a record (convenience method that extracts instrument ID, throws if not found)
+    /// </summary>
+    public string At(Record record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return At(record.InstrumentId);
+    }
+
+    /// <summary>
     /// Update symbol map from a record (for live data)
     /// </summary>
     /// <param name="record">Record to process (only SymbolMapping records update the map)</param>
@@ -124,6 +144,23 @@ public sealed class PitSymbolMap : IPitSymbolMap
                 "Failed to update PIT symbol map from record. " +
                 $"Instrument ID: {record.InstrumentId}, RType: 0x{record.RType:X2}");
         }
+    }
+
+    /// <summary>
+    /// Update symbol map from a SymbolMappingMessage (type-safe version)
+    /// </summary>
+    /// <param name="symbolMapping">Symbol mapping message to update the map from</param>
+    /// <remarks>
+    /// This is a type-safe convenience method that only accepts SymbolMappingMessage objects.
+    /// Internally delegates to OnRecord(). Use this when you have already cast/filtered
+    /// for SymbolMappingMessage records to get compile-time type safety.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">If the record does not have raw bytes available</exception>
+    /// <exception cref="DbentoException">If the native operation fails</exception>
+    public void OnSymbolMapping(SymbolMappingMessage symbolMapping)
+    {
+        ArgumentNullException.ThrowIfNull(symbolMapping);
+        OnRecord(symbolMapping);
     }
 
     public void Dispose()

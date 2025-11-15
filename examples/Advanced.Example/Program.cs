@@ -114,21 +114,21 @@ class Program
 
         Console.WriteLine("✓ Created historical client");
 
-        // Query last hour of trade data
-        var endTime = DateTimeOffset.UtcNow;
-        var startTime = endTime.AddHours(-1);
+        // Query one trading day of data (January 2, 2024)
+        var startTime = new DateTimeOffset(2024, 1, 2, 9, 30, 0, TimeSpan.FromHours(-5));  // Market open
+        var endTime = new DateTimeOffset(2024, 1, 2, 16, 0, 0, TimeSpan.FromHours(-5));    // Market close
 
-        Console.WriteLine($"✓ Querying trades from {startTime:HH:mm:ss} to {endTime:HH:mm:ss}");
-        Console.WriteLine("✓ Symbol: ES.FUT (E-mini S&P 500 Futures)\n");
+        Console.WriteLine($"✓ Querying trades from {startTime:yyyy-MM-dd HH:mm:ss} to {endTime:yyyy-MM-dd HH:mm:ss}");
+        Console.WriteLine("✓ Symbol: NVDA (NVIDIA Corporation)\n");
 
         var count = 0;
         decimal totalVolume = 0;
         decimal volumeWeightedPrice = 0;
 
         await foreach (var record in client.GetRangeAsync(
-            dataset: "GLBX.MDP3",
+            dataset: "EQUS.MINI",
             schema: Schema.Trades,
-            symbols: new[] { "ES.FUT" },
+            symbols: new[] { "NVDA" },
             startTime: startTime,
             endTime: endTime))
         {

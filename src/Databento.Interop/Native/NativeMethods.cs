@@ -199,6 +199,15 @@ public static partial class NativeMethods
         nuint errorBufferSize);
 
     [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial IntPtr dbento_metadata_get_dataset_condition_with_date_range(
+        HistoricalClientHandle handle,
+        string dataset,
+        string startDate,
+        string? endDate,
+        byte[]? errorBuffer,
+        nuint errorBufferSize);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
     public static partial IntPtr dbento_metadata_get_dataset_range(
         HistoricalClientHandle handle,
         string dataset,

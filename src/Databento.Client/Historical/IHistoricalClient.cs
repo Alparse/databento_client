@@ -2,6 +2,7 @@ using Databento.Client.Metadata;
 using Databento.Client.Models;
 using Databento.Client.Models.Batch;
 using Databento.Client.Models.Metadata;
+using Databento.Client.Models.Symbology;
 
 namespace Databento.Client.Historical;
 
@@ -118,12 +119,36 @@ public interface IHistoricalClient : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get dataset condition for a specific date range
+    /// </summary>
+    /// <param name="dataset">Dataset name</param>
+    /// <param name="startDate">Start date (inclusive)</param>
+    /// <param name="endDate">End date (inclusive, optional - if not specified, returns through last available date)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of condition details per date</returns>
+    Task<IReadOnlyList<DatasetConditionDetail>> GetDatasetConditionAsync(
+        string dataset,
+        DateTimeOffset startDate,
+        DateTimeOffset? endDate = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get dataset time range
     /// </summary>
     /// <param name="dataset">Dataset name</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Dataset time range</returns>
     Task<DatasetRange> GetDatasetRangeAsync(
+        string dataset,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// List unit prices per schema for all feed modes
+    /// </summary>
+    /// <param name="dataset">Dataset name</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of unit prices for each feed mode</returns>
+    Task<IReadOnlyList<UnitPricesForMode>> ListUnitPricesAsync(
         string dataset,
         CancellationToken cancellationToken = default);
 
@@ -319,5 +344,29 @@ public interface IHistoricalClient : IAsyncDisposable
         string outputDir,
         string jobId,
         string filename,
+        CancellationToken cancellationToken = default);
+
+    // ========================================================================
+    // Symbology API Methods
+    // ========================================================================
+
+    /// <summary>
+    /// Resolve symbols from one symbology type to another
+    /// </summary>
+    /// <param name="dataset">Dataset name</param>
+    /// <param name="symbols">List of symbols to resolve</param>
+    /// <param name="stypeIn">Input symbology type</param>
+    /// <param name="stypeOut">Output symbology type</param>
+    /// <param name="startDate">Start date (inclusive)</param>
+    /// <param name="endDate">End date (exclusive)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Symbology resolution with mappings, partial matches, and not found symbols</returns>
+    Task<SymbologyResolution> SymbologyResolveAsync(
+        string dataset,
+        IEnumerable<string> symbols,
+        SType stypeIn,
+        SType stypeOut,
+        DateOnly startDate,
+        DateOnly endDate,
         CancellationToken cancellationToken = default);
 }

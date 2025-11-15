@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
@@ -6,6 +7,7 @@ using Databento.Client.Models;
 using Databento.Interop;
 using Databento.Interop.Handles;
 using Databento.Interop.Native;
+using Microsoft.Extensions.Logging;
 
 namespace Databento.Client.Live;
 
@@ -24,6 +26,7 @@ public sealed class LiveClient : ILiveClient
     private readonly VersionUpgradePolicy _upgradePolicy;
     private readonly TimeSpan _heartbeatInterval;
     private readonly string _apiKey;
+    private readonly ILogger<ILiveClient>? _logger;
     // HIGH FIX: Use thread-safe collection for concurrent subscription operations
     private readonly System.Collections.Concurrent.ConcurrentBag<(string dataset, Schema schema, string[] symbols, bool withSnapshot)> _subscriptions;
     private Task? _streamTask;
@@ -59,7 +62,7 @@ public sealed class LiveClient : ILiveClient
     }
 
     internal LiveClient(string apiKey)
-        : this(apiKey, null, false, VersionUpgradePolicy.Upgrade, TimeSpan.FromSeconds(30))
+        : this(apiKey, null, false, VersionUpgradePolicy.Upgrade, TimeSpan.FromSeconds(30), null)
     {
     }
 
@@ -68,7 +71,8 @@ public sealed class LiveClient : ILiveClient
         string? defaultDataset,
         bool sendTsOut,
         VersionUpgradePolicy upgradePolicy,
-        TimeSpan heartbeatInterval)
+        TimeSpan heartbeatInterval,
+        ILogger<ILiveClient>? logger = null)
     {
         if (string.IsNullOrEmpty(apiKey))
             throw new ArgumentException("API key cannot be null or empty", nameof(apiKey));
@@ -78,6 +82,7 @@ public sealed class LiveClient : ILiveClient
         _sendTsOut = sendTsOut;
         _upgradePolicy = upgradePolicy;
         _heartbeatInterval = heartbeatInterval;
+        _logger = logger;
         _subscriptions = new System.Collections.Concurrent.ConcurrentBag<(string, Schema, string[], bool)>();
         // MEDIUM FIX: Use Interlocked for consistency
         Interlocked.Exchange(ref _connectionState, (int)ConnectionState.Disconnected);
@@ -100,7 +105,7 @@ public sealed class LiveClient : ILiveClient
 
         // Create native client with full configuration (Phase 15)
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var handlePtr = NativeMethods.dbento_live_create_ex(
             apiKey,
             defaultDataset,
@@ -114,10 +119,18 @@ public sealed class LiveClient : ILiveClient
         {
             // HIGH FIX: Use safe error string extraction
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
+            _logger?.LogError("Failed to create LiveClient: {Error}", error);
             throw new DbentoException($"Failed to create live client: {error}");
         }
 
         _handle = new LiveClientHandle(handlePtr);
+
+        _logger?.LogInformation(
+            "LiveClient created successfully. Dataset={Dataset}, SendTsOut={SendTsOut}, UpgradePolicy={UpgradePolicy}, Heartbeat={Heartbeat}s",
+            defaultDataset ?? "(none)",
+            sendTsOut,
+            upgradePolicy,
+            (int)heartbeatInterval.TotalSeconds);
     }
 
     /// <summary>
@@ -138,8 +151,15 @@ public sealed class LiveClient : ILiveClient
         var symbolArray = symbols.ToArray();
         // HIGH FIX: Validate symbol array elements
         Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
+
+        _logger?.LogInformation(
+            "Subscribing to dataset={Dataset}, schema={Schema}, symbolCount={SymbolCount}",
+            dataset,
+            schema,
+            symbolArray.Length);
+
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
         var result = NativeMethods.dbento_live_subscribe(
             _handle,
@@ -154,11 +174,20 @@ public sealed class LiveClient : ILiveClient
         {
             // HIGH FIX: Use safe error string extraction
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
-            throw new DbentoException($"Subscription failed: {error}", result);
+            _logger?.LogError(
+                "Subscription failed with error code {ErrorCode}: {Error}. Dataset={Dataset}, Schema={Schema}",
+                result,
+                error,
+                dataset,
+                schema);
+            // MEDIUM FIX: Use exception factory method for proper exception type mapping
+            throw DbentoException.CreateFromErrorCode($"Subscription failed: {error}", result);
         }
 
         // Track subscription for resubscription
         _subscriptions.Add((dataset, schema, symbolArray, withSnapshot: false));
+
+        _logger?.LogInformation("Subscription successful for {SymbolCount} symbols", symbolArray.Length);
 
         return Task.CompletedTask;
     }
@@ -182,7 +211,7 @@ public sealed class LiveClient : ILiveClient
         // HIGH FIX: Validate symbol array elements
         Utilities.ErrorBufferHelpers.ValidateSymbolArray(symbolArray);
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
         // Use native subscribe with snapshot support
         var result = NativeMethods.dbento_live_subscribe_with_snapshot(
@@ -198,7 +227,8 @@ public sealed class LiveClient : ILiveClient
         {
             // HIGH FIX: Use safe error string extraction
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
-            throw new DbentoException($"Subscription with snapshot failed: {error}", result);
+            // MEDIUM FIX: Use exception factory method for proper exception type mapping
+            throw DbentoException.CreateFromErrorCode($"Subscription with snapshot failed: {error}", result);
         }
 
         // Track subscription for resubscription
@@ -217,14 +247,17 @@ public sealed class LiveClient : ILiveClient
         if (_streamTask != null)
             throw new InvalidOperationException("Client is already started");
 
+        _logger?.LogInformation("Starting live stream");
+
         // MEDIUM FIX: Use Interlocked for consistency
         Interlocked.Exchange(ref _connectionState, (int)ConnectionState.Connecting);
+        _logger?.LogDebug("Connection state changed: Disconnected → Connecting");
 
         // Start receiving on a background thread
         _streamTask = Task.Run(() =>
         {
             // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
 
             var result = NativeMethods.dbento_live_start(
                 _handle,
@@ -240,11 +273,16 @@ public sealed class LiveClient : ILiveClient
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
                 // MEDIUM FIX: Use Interlocked for consistency
                 Interlocked.Exchange(ref _connectionState, (int)ConnectionState.Disconnected);
-                throw new DbentoException($"Start failed: {error}", result);
+                _logger?.LogError("Live stream start failed with error code {ErrorCode}: {Error}", result, error);
+                _logger?.LogDebug("Connection state changed: Connecting → Disconnected");
+                // MEDIUM FIX: Use exception factory method for proper exception type mapping
+                throw DbentoException.CreateFromErrorCode($"Start failed: {error}", result);
             }
 
             // MEDIUM FIX: Use Interlocked for consistency
             Interlocked.Exchange(ref _connectionState, (int)ConnectionState.Streaming);
+            _logger?.LogInformation("Live stream started successfully");
+            _logger?.LogDebug("Connection state changed: Connecting → Streaming");
         }, cancellationToken);
 
         return Task.CompletedTask;
@@ -298,7 +336,7 @@ public sealed class LiveClient : ILiveClient
 
         // Use native reconnect (doesn't dispose handle!)
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var result = NativeMethods.dbento_live_reconnect(_handle, errorBuffer, (nuint)errorBuffer.Length);
 
         if (result != 0)
@@ -307,7 +345,8 @@ public sealed class LiveClient : ILiveClient
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
             // MEDIUM FIX: Use Interlocked for consistency
             Interlocked.Exchange(ref _connectionState, (int)ConnectionState.Disconnected);
-            throw new DbentoException($"Reconnect failed: {error}", result);
+            // MEDIUM FIX: Use exception factory method for proper exception type mapping
+            throw DbentoException.CreateFromErrorCode($"Reconnect failed: {error}", result);
         }
 
         // MEDIUM FIX: Use Interlocked for consistency
@@ -323,14 +362,15 @@ public sealed class LiveClient : ILiveClient
 
         // Use native resubscribe (handles all tracked subscriptions internally)
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var result = NativeMethods.dbento_live_resubscribe(_handle, errorBuffer, (nuint)errorBuffer.Length);
 
         if (result != 0)
         {
             // HIGH FIX: Use safe error string extraction
             var error = Utilities.ErrorBufferHelpers.SafeGetString(errorBuffer);
-            throw new DbentoException($"Resubscription failed: {error}", result);
+            // MEDIUM FIX: Use exception factory method for proper exception type mapping
+            throw DbentoException.CreateFromErrorCode($"Resubscription failed: {error}", result);
         }
 
         await Task.CompletedTask;
@@ -383,8 +423,7 @@ public sealed class LiveClient : ILiveClient
             }
 
             // Sanity check: reasonable maximum record size (10MB)
-            const int MaxReasonableRecordSize = 10 * 1024 * 1024;
-            if (recordLength > MaxReasonableRecordSize)
+            if (recordLength > Utilities.Constants.MaxReasonableRecordSize)
             {
                 var ex = new DbentoException($"Record suspiciously large: {recordLength} bytes");
                 ErrorOccurred?.Invoke(this, new Events.ErrorEventArgs(ex));

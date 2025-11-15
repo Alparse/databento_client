@@ -31,20 +31,20 @@ class Program
 
             Console.WriteLine("✓ Created historical client");
 
-            // Define time range (last trading day)
-            var endTime = DateTimeOffset.UtcNow;
-            var startTime = endTime.AddDays(-1);
+            // Define time range (January 2, 2024 - one trading day)
+            var startTime = new DateTimeOffset(2024, 1, 2, 0, 0, 0, TimeSpan.Zero);
+            var endTime = new DateTimeOffset(2024, 1, 2, 23, 59, 59, TimeSpan.Zero);
 
             Console.WriteLine($"✓ Querying data from {startTime:yyyy-MM-dd HH:mm:ss} to {endTime:yyyy-MM-dd HH:mm:ss}");
-            Console.WriteLine($"✓ Symbol: ES.FUT (E-mini S&P 500 Futures)");
+            Console.WriteLine($"✓ Symbol: NVDA (NVIDIA Corporation)");
             Console.WriteLine($"✓ Schema: Trades\n");
 
             // Query historical trades
             var count = 0;
             await foreach (var record in client.GetRangeAsync(
-                dataset: "GLBX.MDP3",
+                dataset: "EQUS.MINI",
                 schema: Schema.Trades,
-                symbols: new[] { "ES.FUT" },
+                symbols: new[] { "NVDA" },
                 startTime: startTime,
                 endTime: endTime))
             {

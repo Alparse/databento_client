@@ -35,8 +35,29 @@ public interface IPitSymbolMap : IDisposable
     string At(uint instrumentId);
 
     /// <summary>
+    /// Find symbol for a record (convenience method that extracts instrument ID)
+    /// </summary>
+    /// <param name="record">The record to look up</param>
+    /// <returns>Symbol string if found, null otherwise</returns>
+    string? Find(Record record);
+
+    /// <summary>
+    /// Get symbol for a record (convenience method that extracts instrument ID, throws if not found)
+    /// </summary>
+    /// <param name="record">The record to look up</param>
+    /// <returns>Symbol string</returns>
+    /// <exception cref="KeyNotFoundException">If mapping not found</exception>
+    string At(Record record);
+
+    /// <summary>
     /// Update symbol map from a record (for live data)
     /// </summary>
     /// <param name="record">Record containing symbol mapping information</param>
     void OnRecord(Record record);
+
+    /// <summary>
+    /// Update symbol map from a SymbolMappingMessage (type-safe version)
+    /// </summary>
+    /// <param name="symbolMapping">Symbol mapping message to update the map from</param>
+    void OnSymbolMapping(SymbolMappingMessage symbolMapping);
 }

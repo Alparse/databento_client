@@ -1,5 +1,6 @@
 using Databento.Client.Historical;
 using Databento.Client.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Databento.Client.Builders;
 
@@ -15,6 +16,7 @@ public sealed class HistoricalClientBuilder
     private VersionUpgradePolicy _upgradePolicy = VersionUpgradePolicy.Upgrade;
     private string? _userAgent;
     private TimeSpan _timeout = TimeSpan.FromSeconds(30);
+    private ILogger<IHistoricalClient>? _logger;
 
     /// <summary>
     /// Set the Databento API key
@@ -82,6 +84,20 @@ public sealed class HistoricalClientBuilder
     }
 
     /// <summary>
+    /// Set the logger for operational diagnostics and debugging
+    /// </summary>
+    /// <param name="logger">Logger instance for the historical client (optional)</param>
+    /// <remarks>
+    /// When provided, the client will log query operations, errors, and other diagnostic information.
+    /// This is highly recommended for production deployments to troubleshoot issues and monitor performance.
+    /// </remarks>
+    public HistoricalClientBuilder WithLogger(ILogger<IHistoricalClient> logger)
+    {
+        _logger = logger;
+        return this;
+    }
+
+    /// <summary>
     /// Build the HistoricalClient instance
     /// </summary>
     public IHistoricalClient Build()
@@ -99,6 +115,7 @@ public sealed class HistoricalClientBuilder
             _customPort,
             _upgradePolicy,
             _userAgent,
-            _timeout);
+            _timeout,
+            _logger);
     }
 }

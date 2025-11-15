@@ -32,4 +32,19 @@ public interface ITsSymbolMap : IDisposable
     /// <returns>Symbol string</returns>
     /// <exception cref="KeyNotFoundException">If mapping not found</exception>
     string At(DateOnly date, uint instrumentId);
+
+    /// <summary>
+    /// Find symbol for a record (convenience method that extracts date and instrument ID)
+    /// </summary>
+    /// <param name="record">The record to look up</param>
+    /// <returns>Symbol string if found, null otherwise</returns>
+    string? Find(Models.Record record);
+
+    /// <summary>
+    /// Get symbol for a record (convenience method that extracts date and instrument ID, throws if not found)
+    /// </summary>
+    /// <param name="record">The record to look up</param>
+    /// <returns>Symbol string</returns>
+    /// <exception cref="KeyNotFoundException">If mapping not found</exception>
+    string At(Models.Record record);
 }

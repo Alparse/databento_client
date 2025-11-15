@@ -11,13 +11,32 @@ namespace databento_native {
 
 /**
  * Safely copy a C string to a buffer with null termination
- * @param dest Destination buffer
- * @param dest_size Size of destination buffer
- * @param src Source string (can be nullptr)
- * @return true if copy succeeded, false if buffer invalid
+ *
+ * MEDIUM FIX: Enhanced documentation and validation to prevent buffer overflow attacks
+ *
+ * CRITICAL SECURITY REQUIREMENT:
+ * The dest_size parameter MUST exactly match the actual allocated buffer size!
+ * Providing an incorrect size (larger than actual allocation) will cause buffer overflow.
+ *
+ * This function trusts the caller to provide accurate size information. It cannot detect
+ * if the actual buffer is smaller than dest_size claims. The C# layer MUST validate
+ * buffer sizes before calling native code.
+ *
+ * @param dest Destination buffer (must be at least dest_size bytes allocated)
+ * @param dest_size ACTUAL size of destination buffer in bytes (NOT desired copy size!)
+ * @param src Source string (can be nullptr for empty string)
+ * @return true if copy succeeded, false if buffer invalid or too small
+ *
+ * Example CORRECT usage:
+ *   char buffer[2048];
+ *   SafeStrCopy(buffer, 2048, error_message);  // ✓ Size matches allocation
+ *
+ * Example INCORRECT usage:
+ *   char buffer[100];
+ *   SafeStrCopy(buffer, 1000, error_message);  // ✗ BUFFER OVERFLOW! Size is wrong
  */
 inline bool SafeStrCopy(char* dest, size_t dest_size, const char* src) {
-    // Validate destination
+    // Validate destination pointer
     if (!dest) {
         return false;  // Cannot write to NULL
     }
@@ -26,32 +45,40 @@ inline bool SafeStrCopy(char* dest, size_t dest_size, const char* src) {
         return false;  // Cannot write to zero-size buffer
     }
 
-    // Enforce reasonable minimum buffer size for error messages
+    // MEDIUM FIX: Enforce reasonable minimum buffer size for error messages
+    // Prevents uselessly small buffers that can't hold meaningful error messages
     constexpr size_t MIN_ERROR_BUFFER_SIZE = 16;
     if (dest_size < MIN_ERROR_BUFFER_SIZE) {
-        // Still write what we can, but warn
+        // Still write what we can, but return false to indicate buffer too small
         if (src && src[0] != '\0') {
             strncpy(dest, src, dest_size - 1);
             dest[dest_size - 1] = '\0';
         } else {
             dest[0] = '\0';
         }
-        return false;  // Indicate buffer too small
+        return false;  // Indicate buffer too small for meaningful error
     }
 
-    // Enforce maximum buffer size to prevent resource exhaustion
-    constexpr size_t MAX_ERROR_BUFFER_SIZE = 65536;  // 64KB
+    // MEDIUM FIX: Enforce maximum buffer size to prevent resource exhaustion
+    // Caps extremely large buffers to prevent memory exhaustion attacks
+    constexpr size_t MAX_ERROR_BUFFER_SIZE = 65536;  // 64KB (reasonable max for errors)
+    if (dest_size > MAX_ERROR_BUFFER_SIZE) {
+        // Log warning in debug builds
+        #ifdef _DEBUG
+        // In debug: Could add logging here if needed
+        #endif
+    }
     size_t safe_size = std::min(dest_size, MAX_ERROR_BUFFER_SIZE);
 
-    // Handle null source
+    // Handle null source (treat as empty string)
     if (!src) {
         dest[0] = '\0';
         return true;
     }
 
-    // Copy with bounds checking
+    // Copy with bounds checking - strncpy ensures we don't exceed safe_size
     strncpy(dest, src, safe_size - 1);
-    dest[safe_size - 1] = '\0';  // Ensure null termination
+    dest[safe_size - 1] = '\0';  // Ensure null termination (defense in depth)
 
     return true;
 }
@@ -102,12 +129,14 @@ inline databento::UnixNanos NsToUnixNanos(int64_t ns) {
         throw std::invalid_argument("Timestamp cannot be negative (before Unix epoch 1970-01-01)");
     }
 
-    // Validate upper bound (year 2262 - uint64_t nanosecond limit)
-    // uint64_t can represent nanoseconds up to 2262-04-11 23:47:16 UTC
-    // This is the practical maximum for nanosecond-precision timestamps
-    constexpr uint64_t MAX_TIMESTAMP_NS = UINT64_MAX;
-    if (static_cast<uint64_t>(ns) > MAX_TIMESTAMP_NS) {
-        throw std::invalid_argument("Timestamp too large (after year 2262)");
+    // CRITICAL FIX: Validate upper bound with realistic maximum
+    // Year 2200-01-01 00:00:00 UTC in nanoseconds = 7,258,118,400,000,000,000
+    // This is a reasonable practical limit (well before uint64_t overflow at year 2262)
+    // Previous check against UINT64_MAX was ineffective as int64_t cast to uint64_t
+    // can never exceed UINT64_MAX
+    constexpr int64_t MAX_TIMESTAMP_NS = 7258118400000000000LL;  // Year 2200
+    if (ns > MAX_TIMESTAMP_NS) {
+        throw std::invalid_argument("Timestamp too large (after year 2200)");
     }
 
     // Safe cast to unsigned after validation
@@ -130,7 +159,7 @@ inline void ValidateNonEmptyString(const char* param_name, const char* value) {
 }
 
 /**
- * Validate symbol array parameters for consistency
+ * Validate symbol array parameters for consistency and prevent resource exhaustion
  * @param symbols Symbol array pointer
  * @param symbol_count Number of symbols
  * @throws std::invalid_argument if validation fails
@@ -141,10 +170,40 @@ inline void ValidateSymbolArray(const char** symbols, size_t symbol_count) {
         throw std::invalid_argument("Symbol array cannot be NULL when symbol_count > 0");
     }
 
-    // Validate reasonable symbol count (prevent resource exhaustion)
+    // HIGH FIX: Validate reasonable symbol count (prevent resource exhaustion)
     constexpr size_t MAX_SYMBOLS = 100000;  // Reasonable limit for batch operations
     if (symbol_count > MAX_SYMBOLS) {
         throw std::invalid_argument("Symbol count exceeds maximum limit of " + std::to_string(MAX_SYMBOLS));
+    }
+
+    // HIGH FIX: Validate individual symbol lengths and total size to prevent resource exhaustion
+    // An attacker could provide 100,000 symbols where each is megabytes long
+    constexpr size_t MAX_SYMBOL_LENGTH = 1024;  // Reasonable max for a ticker symbol
+    constexpr size_t MAX_TOTAL_SIZE = 10 * 1024 * 1024;  // 10MB total for all symbols combined
+
+    size_t total_size = 0;
+    for (size_t i = 0; i < symbol_count; ++i) {
+        // Check for NULL elements in array
+        if (!symbols[i]) {
+            throw std::invalid_argument("Symbol array contains NULL element at index " + std::to_string(i));
+        }
+
+        // Use strnlen to safely check length without reading past buffer
+        // strnlen returns MAX_SYMBOL_LENGTH + 1 if string is longer than limit
+        size_t len = strnlen(symbols[i], MAX_SYMBOL_LENGTH + 1);
+
+        if (len > MAX_SYMBOL_LENGTH) {
+            throw std::invalid_argument("Symbol at index " + std::to_string(i) +
+                " exceeds maximum length of " + std::to_string(MAX_SYMBOL_LENGTH));
+        }
+
+        total_size += len;
+
+        // Check running total to prevent overflow and resource exhaustion
+        if (total_size > MAX_TOTAL_SIZE) {
+            throw std::invalid_argument("Total symbol data size exceeds maximum limit of " +
+                std::to_string(MAX_TOTAL_SIZE) + " bytes");
+        }
     }
 }
 

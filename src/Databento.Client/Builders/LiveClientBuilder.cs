@@ -1,5 +1,6 @@
 using Databento.Client.Live;
 using Databento.Client.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Databento.Client.Builders;
 
@@ -13,6 +14,7 @@ public sealed class LiveClientBuilder
     private bool _sendTsOut = false;
     private VersionUpgradePolicy _upgradePolicy = VersionUpgradePolicy.Upgrade;
     private TimeSpan _heartbeatInterval = TimeSpan.FromSeconds(30);
+    private ILogger<ILiveClient>? _logger;
 
     /// <summary>
     /// Set the Databento API key
@@ -67,6 +69,20 @@ public sealed class LiveClientBuilder
     }
 
     /// <summary>
+    /// Set the logger for operational diagnostics and debugging
+    /// </summary>
+    /// <param name="logger">Logger instance for the live client (optional)</param>
+    /// <remarks>
+    /// When provided, the client will log connection state changes, subscription operations,
+    /// errors, and other diagnostic information. This is highly recommended for production deployments.
+    /// </remarks>
+    public LiveClientBuilder WithLogger(ILogger<ILiveClient> logger)
+    {
+        _logger = logger;
+        return this;
+    }
+
+    /// <summary>
     /// Build the LiveClient instance
     /// </summary>
     public ILiveClient Build()
@@ -79,6 +95,7 @@ public sealed class LiveClientBuilder
             _dataset,
             _sendTsOut,
             _upgradePolicy,
-            _heartbeatInterval);
+            _heartbeatInterval,
+            _logger);
     }
 }

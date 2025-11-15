@@ -72,4 +72,65 @@ public static class ErrorBufferHelpers
                 throw new ArgumentException($"Symbol array contains null or empty element at index {i}", paramName);
         }
     }
+
+    /// <summary>
+    /// Extract HTTP status code from Databento error message
+    /// </summary>
+    /// <param name="errorMessage">Error message from native layer</param>
+    /// <returns>HTTP status code if found, otherwise null</returns>
+    /// <remarks>
+    /// Parses error messages in the format:
+    /// "Received an error response from request to /path with status 401 and body '{...}'"
+    /// </remarks>
+    public static int? ExtractStatusCode(string errorMessage)
+    {
+        if (string.IsNullOrEmpty(errorMessage))
+            return null;
+
+        // Look for "with status XXX" pattern
+        const string statusPattern = " with status ";
+        int statusIndex = errorMessage.IndexOf(statusPattern, StringComparison.Ordinal);
+
+        if (statusIndex >= 0)
+        {
+            int startIndex = statusIndex + statusPattern.Length;
+            int endIndex = errorMessage.IndexOf(' ', startIndex);
+
+            if (endIndex < 0)
+                endIndex = errorMessage.Length;
+
+            string statusCodeStr = errorMessage.Substring(startIndex, endIndex - startIndex);
+
+            if (int.TryParse(statusCodeStr, out int statusCode))
+            {
+                return statusCode;
+            }
+        }
+
+        // Fallback: Look for "status_code":XXX in JSON body
+        const string jsonPattern = "\"status_code\":";
+        int jsonIndex = errorMessage.IndexOf(jsonPattern, StringComparison.Ordinal);
+
+        if (jsonIndex >= 0)
+        {
+            int startIndex = jsonIndex + jsonPattern.Length;
+            int endIndex = startIndex;
+
+            // Skip whitespace and find the end of the number
+            while (endIndex < errorMessage.Length &&
+                   (char.IsDigit(errorMessage[endIndex]) || errorMessage[endIndex] == ' '))
+            {
+                endIndex++;
+            }
+
+            string statusCodeStr = errorMessage.Substring(startIndex, endIndex - startIndex).Trim();
+
+            if (int.TryParse(statusCodeStr, out int statusCode))
+            {
+                return statusCode;
+            }
+        }
+
+        return null;
+    }
 }

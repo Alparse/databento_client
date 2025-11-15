@@ -363,6 +363,204 @@ DATABENTO_API int dbento_metadata_get_symbol_mapping(
  */
 DATABENTO_API void dbento_metadata_destroy(DbentoMetadataHandle handle);
 
+/**
+ * List all available datasets, optionally filtered by venue
+ * @param handle Historical client handle
+ * @param venue Optional venue filter (can be NULL for all datasets)
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON array of dataset names as string, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_list_datasets(
+    DbentoHistoricalClientHandle handle,
+    const char* venue,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * List all publishers
+ * @param handle Historical client handle
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON array of publisher information, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_list_publishers(
+    DbentoHistoricalClientHandle handle,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * List all schemas available for a dataset
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON array of schema names, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_list_schemas(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * List all fields for an encoding and schema
+ * @param handle Historical client handle
+ * @param encoding Encoding type (e.g., "dbn", "csv", "json")
+ * @param schema Schema name
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON array of field information, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_list_fields(
+    DbentoHistoricalClientHandle handle,
+    const char* encoding,
+    const char* schema,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * Get dataset availability condition
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON object with condition info, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_get_dataset_condition(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * Get dataset condition for a specific date range
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param start_date Start date in ISO 8601 format (YYYY-MM-DD)
+ * @param end_date End date in ISO 8601 format (YYYY-MM-DD), or NULL for open-ended range
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON array of condition details per date, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_get_dataset_condition_with_date_range(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    const char* start_date,
+    const char* end_date,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * Get dataset time range
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON object with dataset range, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_get_dataset_range(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * Get record count for a query
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param schema Schema name
+ * @param start_time_ns Start time (nanoseconds since epoch)
+ * @param end_time_ns End time (nanoseconds since epoch)
+ * @param symbols Array of symbols
+ * @param symbol_count Number of symbols
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return Record count, or UINT64_MAX on failure
+ */
+DATABENTO_API uint64_t dbento_metadata_get_record_count(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    const char* schema,
+    int64_t start_time_ns,
+    int64_t end_time_ns,
+    const char** symbols,
+    size_t symbol_count,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * Get billable size for a query
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param schema Schema name
+ * @param start_time_ns Start time (nanoseconds since epoch)
+ * @param end_time_ns End time (nanoseconds since epoch)
+ * @param symbols Array of symbols
+ * @param symbol_count Number of symbols
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return Billable size in bytes, or UINT64_MAX on failure
+ */
+DATABENTO_API uint64_t dbento_metadata_get_billable_size(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    const char* schema,
+    int64_t start_time_ns,
+    int64_t end_time_ns,
+    const char** symbols,
+    size_t symbol_count,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * Get cost estimate for a query
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param schema Schema name
+ * @param start_time_ns Start time (nanoseconds since epoch)
+ * @param end_time_ns End time (nanoseconds since epoch)
+ * @param symbols Array of symbols
+ * @param symbol_count Number of symbols
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return Cost as JSON string, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_get_cost(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    const char* schema,
+    int64_t start_time_ns,
+    int64_t end_time_ns,
+    const char** symbols,
+    size_t symbol_count,
+    char* error_buffer,
+    size_t error_buffer_size);
+
+/**
+ * Get combined billing information for a query
+ * @param handle Historical client handle
+ * @param dataset Dataset name
+ * @param schema Schema name
+ * @param start_time_ns Start time (nanoseconds since epoch)
+ * @param end_time_ns End time (nanoseconds since epoch)
+ * @param symbols Array of symbols
+ * @param symbol_count Number of symbols
+ * @param error_buffer Buffer for error messages
+ * @param error_buffer_size Size of error buffer
+ * @return JSON object with billing info, or NULL on failure (must be freed with dbento_free_string)
+ */
+DATABENTO_API const char* dbento_metadata_get_billing_info(
+    DbentoHistoricalClientHandle handle,
+    const char* dataset,
+    const char* schema,
+    int64_t start_time_ns,
+    int64_t end_time_ns,
+    const char** symbols,
+    size_t symbol_count,
+    char* error_buffer,
+    size_t error_buffer_size);
+
 // ============================================================================
 // Symbol Map API
 // ============================================================================

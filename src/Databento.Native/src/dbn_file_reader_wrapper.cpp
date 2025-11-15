@@ -199,8 +199,10 @@ DATABENTO_API int dbento_dbn_file_next_record(
             return -1;
         }
 
-        // Copy record data
-        std::memcpy(record_buffer, record, rec_size);
+        // Copy record data from the underlying RecordHeader pointer
+        // The Record class is a wrapper - we need to get the actual data pointer
+        const void* record_data = &record->Header();
+        std::memcpy(record_buffer, record_data, rec_size);
         *record_length = rec_size;
         *record_type = rec_type;
 

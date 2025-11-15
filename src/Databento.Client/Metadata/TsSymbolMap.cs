@@ -39,13 +39,15 @@ public sealed class TsSymbolMap : ITsSymbolMap
     /// <summary>
     /// Number of mappings in the symbol map
     /// </summary>
+    /// <exception cref="OverflowException">If the map contains more than Int32.MaxValue entries</exception>
     public int Size
     {
         get
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             nuint size = NativeMethods.dbento_ts_symbol_map_size(_handle);
-            return (int)size;
+            // OPTIONAL FIX: Checked cast prevents silent overflow if native returns huge values
+            return checked((int)size);
         }
     }
 
@@ -88,6 +90,30 @@ public sealed class TsSymbolMap : ITsSymbolMap
                 $"No symbol found for instrument ID {instrumentId} on date {date}");
         }
         return symbol;
+    }
+
+    /// <summary>
+    /// Find symbol for a record (convenience method that extracts date and instrument ID)
+    /// </summary>
+    public string? Find(Models.Record record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        // Extract date from record's timestamp
+        var date = DateOnly.FromDateTime(record.Timestamp.DateTime);
+        return Find(date, record.InstrumentId);
+    }
+
+    /// <summary>
+    /// Get symbol for a record (convenience method that extracts date and instrument ID, throws if not found)
+    /// </summary>
+    public string At(Models.Record record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        // Extract date from record's timestamp
+        var date = DateOnly.FromDateTime(record.Timestamp.DateTime);
+        return At(date, record.InstrumentId);
     }
 
     public void Dispose()

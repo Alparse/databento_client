@@ -65,7 +65,7 @@ public sealed class Metadata : IMetadata
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var handlePtr = NativeMethods.dbento_metadata_create_symbol_map(
             _handle,
             errorBuffer,
@@ -90,7 +90,7 @@ public sealed class Metadata : IMetadata
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         // MEDIUM FIX: Increased from 512 to 2048 for full error context
-        byte[] errorBuffer = new byte[2048];
+        byte[] errorBuffer = new byte[Utilities.Constants.ErrorBufferSize];
         var handlePtr = NativeMethods.dbento_metadata_create_symbol_map_for_date(
             _handle,
             date.Year,
